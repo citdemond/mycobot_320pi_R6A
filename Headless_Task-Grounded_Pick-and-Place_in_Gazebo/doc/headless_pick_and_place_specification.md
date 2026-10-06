@@ -2,8 +2,10 @@
 ## Closing the "no real task semantics" gap, on a CPU-only laptop
 
 ---
+title: "Headless Task-Grounded Pick-and-Place in Gazebo"
+## Closing the "no real task semantics" gap, on a CPU-only laptop
 
-## Part 0 — Why this is the right thing to build now
+**Result: A real block was picked up and placed on a plate in Gazebo simulation, verified numerically and automatically.** `RESULT: motions_ok=True placed_on_plate=True grasp_held=True` was confirmed after ~4 minutes of execution. The block was carried (Z constant at 0.010 m offset through lift+transport), grasp held, and final pose placed on plate: True. Docker environment fixes enable headless and GUI demo execution via `docker exec -e DISPLAY=:0 -e LIBGL_ALWAYS_SOFTWARE=1 -e GALLIUM_DRIVER=llvmpipe -e MESA_LOADER_DRIVER_OVERRIDE= -it gazebo_to_lerobot bash -c 'source /opt/ros/jazzy/setup.bash && source /workspace/install/setup.bash && python3 /workspace/htgpp/scripts/run_demo.py --gui true --record false --block-x 0.22 --block-y 0.0'`.
 
 Your two existing episodes prove the **plumbing**: Gazebo → recording → LeRobot dataset → reload. That was the point, and it worked.
 
@@ -22,6 +24,8 @@ That matters because a VLA learns the mapping *instruction + image → action*. 
 | **Transfers to real robot?** | The *method* yes, the *data* partially — see Part 10 |
 
 And a practical point worth stating plainly: **headless is genuinely better here, not a fallback.** A viewport tells you the block "looks grasped." Pose telemetry tells you the block's Z rose 87 mm in lockstep with the end-effector, with a constant offset, for 340 consecutive samples. The second is evidence; the first is an impression.
+
+The single-command demo execution is now reproducible. See the Docker environment section below for the exact command that produces `RESULT: motions_ok=True placed_on_plate=True grasp_held=True`.
 
 ---
 

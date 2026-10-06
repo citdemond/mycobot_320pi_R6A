@@ -13,7 +13,9 @@
 #   4-camera rig and leaves the arm tiny.
 # Extra arguments go straight to ros2 launch.
 export DISPLAY=:0
-export LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe MESA_LOADER_DRIVER_OVERRIDE=
+export LIBGL_ALWAYS_SOFTWARE=1
+export GALLIUM_DRIVER=llvmpipe
+export MESA_LOADER_DRIVER_OVERRIDE=
 source /opt/ros/jazzy/setup.bash
 source /workspace/install/setup.bash
 
