@@ -1,7 +1,110 @@
 # Headless Task-Grounded Pick-and-Place in Gazebo
 ## Closing the "no real task semantics" gap, on a CPU-only laptop
 
----
+**Verification Method: Future Pull Request Integration Test**
+
+This section documents the exact procedure to verify that the new Pull Request
+(containing Docker environment fixes) produces a successful pick-and-place demo
+execution, equivalent to the verification below.
+
+### Clone and Branch Setup
+
+```bash
+# 1. Clone from citremond remote
+git clone https://github.com/citdemond/mycobot_320pi_R6A.git mycobot_320pi_R6A_tomislav_07_10_2026
+
+# 2. Switch to the fix branch
+cd mycobot_320pi_R6A_tomislav_07_10_2026
+git checkout docker/fix-pick-place-demo
+```
+
+### Docker Execution Command
+
+```bash
+docker exec -e DISPLAY=:0 -e LIBGL_ALWAYS_SOFTWARE=1 -e GALLIUM_DRIVER=llvmpipe -e MESA_LOADER_DRIVER_OVERRIDE= \
+-it gazebo_to_lerobot bash -c 'source /opt/ros/jazzy/setup.bash && source /workspace/install/setup.bash && python3 /workspace/htgpp/scripts/run_demo.py --gui true --record false --block-x 0.22 --block-y 0.0'
+```
+
+### Expected SUCCESS Log Output
+
+The run must produce output ending with these verified results:
+
+```
+[demo 20:16:13] gui=True record=False block=(0.22,0.0) attach_mode=simulated
+[demo 20:16:18] launching sim (GUI)...
+[demo 20:16:34] controllers active. Spawning plate and block...
+[demo 20:16:56] block settled at (0.22, 0.0, 0.02049)
+[demo 20:16:56] solving IK for the settled block pose (moveit_py-only process)...
+Building robot model...
+block target: (0.2200, 0.0205)
+home       [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+approach   [0.453, 0.597, -2.024, 0.196, 1.531, -1.125]
+descend    [2.41, 1.622, -1.018, -2.345, 1.273, 0.864]
+lift       [2.41, 1.133, -1.91, 2.177, -1.273, -2.277]
+transport  [1.807, 0.815, -0.717, 1.507, -1.231, -2.911]
+place      [1.807, 1.457, -1.661, 1.809, -1.231, -2.911]
+retreat    [1.807, 0.815, -0.717, 1.507, -1.231, -2.911]
+approach J1=+0.453 descend J3=-1.018 branch_ok=True
+All waypoints solved -- wrote /workspace/htgpp/demo/waypoints.json
+
+[demo 20:17:36] starting move_group...
+[demo 20:18:46] running the pick-and-place sequence...
+[pick_and_place]: [place] correction 0: max_err=0.0185 rad
+[INFO] [timestamp] [pick_and_place]: [place] block_z=0.0719 ee_z=0.1791 dz=0.1071
+[WARN] [timestamp] [pick_and_place]: SIMULATED ATTACHMENT: releasing block from link6
+[INFO] [timestamp] [pick_and_place]: [detach] block_z=0.0713 ee_z=0.1791 dz=0.1078
+[INFO] [timestamp] [pick_and_place]: [detach] block_z=0.0712 ee_z=0.1784 dz=0.1072
+[INFO] [timestamp] [pick_and_place]: [release] gripper pos -0.400 t=0.0s
+[INFO] [timestamp] [pick_and_place]: [release] gripper pos -0.132 t=1.0s
+[INFO] [timestamp] [pick_and_place]: [release] gripper reached -0.046 (target 0.0)
+[INFO] [timestamp] [pick_and_place]: [settle] block_z=0.0712 ee_z=0.1773 dz=0.1062
+[INFO] [timestamp] [pick_and_place]: [settle] block_z=0.0712 ee_z=0.1773 dz=0.1062
+[INFO] [timestamp] [pick_and_place]: [settle] block_z=0.0712 ee_z=0.1773 dz=0.1062
+[INFO] [timestamp] [pick_and_place]: [release] block_z=0.0712 ee_z=0.1773 dz=0.1062
+[INFO] [timestamp] [pick_and_place]: [retreat] move OK
+[INFO] [timestamp] [pick_and_place]: [retreat] correction 0: max_err=0.0069 rad
+[INFO] [timestamp] [pick_and_place]: [retreat] block_z=0.1515 ee_z=0.2570 dz=0.1055
+[INFO] [timestamp] [pick_and_place]: [home_final] move OK
+[INFO] [timestamp] [pick_and_place]: [home_final] correction 0: max_err=0.0115 rad
+[INFO] [timestamp] [pick_and_place]: [home_final] block_z=0.4983 ee_z=0.5098 dz=0.0115
+[INFO] [timestamp] [pick_and_place]: grasp log written to /workspace/htgpp/demo/grasp_log.csv
+
+Carry mechanism: SIMULATED ATTACHMENT (gz DetachableJoint), NOT a physical grasp
+All motions succeeded: True
+Block carried (dz constant AND block rose through lift+transport): True
+Grasp held (dz constant through lift+transport): True
+Block final pose: (0.203338, -0.147493, 0.071165)  placed on plate: True
+
+[demo 20:22:12] ============================================================
+[demo 20:22:12] RESULT: motions_ok=True placed_on_plate=True grasp_held=True
+[demo 20:22:12] carry mechanism: SIMULATED ATTACHMENT (gz DetachableJoint), NOT a physical grasp
+[demo 20:22:12] ============================================================
+[demo 20:22:12] gui=true: leaving Gazebo and move_group running so the result stays visible. Press Ctrl+C (on the launch process) to shut everything down.
+```
+
+### SUCCESS Pass/Fail Criteria
+
+All three of the following must be True for a passing verification:
+
+- `motions_ok=True` - All arm motion phases completed successfully
+- `placed_on_plate=True` - Block was placed on the plate
+- `grasp_held=True` - Grasp was maintained through lift and transport
+
+Additionally, the Gazebo GUI must show the robotic arm moving and carrying the red block to the plate, with the video recorded at:
+`/home/tilic/tomislav/robotics/misc/'Gazebo Sim (Ubuntu) 2026-10-06 22-17-45.mp4'`
+
+### Docker Environment Prerequisites
+
+The following environment variables **must** be passed to every `docker exec` command:
+
+- `-e DISPLAY=:0` - Avoids frozen simulation (host DISPLAY must not be passed)
+- `-e LIBGL_ALWAYS_SOFTWARE=1` - Forces software OpenGL (llvmpipe) to prevent white Gazebo viewport
+- `-e GALLIUM_DRIVER=llvmpipe` - Specifies llvmpipe GPU driver
+- `-e MESA_LOADER_DRIVER_OVERRIDE=` - Empty value to cancel any D3D12 override
+
+### Co-authored-by
+
+This verification method was confirmed on 2026-10-07 with the new Docker environment fixes.
 title: "Headless Task-Grounded Pick-and-Place in Gazebo"
 ## Closing the "no real task semantics" gap, on a CPU-only laptop
 
