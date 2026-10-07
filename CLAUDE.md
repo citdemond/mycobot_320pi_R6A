@@ -6,7 +6,7 @@
 
 ## Project in one paragraph
 
-A research platform built around a **MyCobot 320 Pi** 6-DoF arm. Today the repo covers (a) direct control via a ROS2/TCP bridge, (b) a Gazebo Harmonic digital twin with synthetic data collection, (c) a vision-based **pose-estimation** pipeline built on NVlabs' DREAM (VGG-19 → belief maps → PnP), and (d) a hand-teleoperation pipeline (Orbbec Astra → Wilor → rosbridge → joints) validated on the physical robot on 22/04/2026. The system runs split across a **PC Tour** (`10.10.0.115`) and a **Raspberry Pi** on the arm (`10.10.0.221` — not `.223` or `.225`, older docs are wrong).
+A research platform built around a **MyCobot 320 Pi** 6-DoF arm. Today the repo covers (a) direct control via a ROS2/TCP bridge, (b) a Gazebo Harmonic digital twin with synthetic data collection, (c) a vision-based **pose-estimation** pipeline built on NVlabs' DREAM (VGG-19 → belief maps → PnP), and (d) a hand-teleoperation pipeline (Orbbec Astra → Wilor → rosbridge → joints) validated on the physical robot on 22/04/2026. The system runs split across a **PC Tour** and a **Raspberry Pi** on the arm. **Neither address is fixed** — measured 2026-09-10: PC Tour **`10.10.0.111`**, Pi **`10.10.0.219`** (the Pi was `.218` on 07/09). Config files say `10.10.0.224`; that host answers `ping` **without necessarily serving the bridge**, so always identify the Pi by a **TCP round-trip on port 5005**, never by ping.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full diagram, [`SESSION_RESUME.md`](SESSION_RESUME.md) for where active work stands, and [`CHANGELOG.md`](CHANGELOG.md) for the version history.
 
@@ -24,7 +24,7 @@ The full policy — when to trigger, which files to update, branch discipline, c
 **Hard boundaries:**
 - Branch must match the work's domain (see [`.claude/rules/git-branching.md`](.claude/rules/git-branching.md)). Mismatch → stop and ask.
 - Pushing is **never** automatic — only on explicit user instruction.
-- Skip backup files (`*.bak*`), local reports (`*.xlsx` in `teleop/`), build outputs, training checkpoints, runtime locks.
+- Skip backup files (`*.bak*`), build outputs, training checkpoints, runtime locks. `*.xlsx` workbooks are committable **on explicit approval only** — ask, never assume.
 
 For explicit mid-session invocation, use [`/finish-session`](.claude/commands/finish-session.md).
 
@@ -37,7 +37,7 @@ This repo is not just a control-software project — it's the starting substrate
 1. **Physics-accurate digital twin** → migrate the simulation path from Gazebo/DART to **NVIDIA Isaac Sim + Isaac Lab**, unlocking photorealistic rendering, soft-body gripper physics, and GPU-parallel training envs. See [`.claude/skills/isaac-sim-integration/SKILL.md`](.claude/skills/isaac-sim-integration/).
 2. **AI physics** → use Isaac Sim's differentiable physics and learned world models to train policies that transfer to the real robot without hand-tuned dynamics.
 3. **Vision-Language-Action models** → fine-tune a VLA (OpenVLA / Octo / π0 class) on episodic teleop data, deploy a VLA inference node behind the same ROS2 topics the teleop dashboard already uses. See [`.claude/agents/vla-integrator.md`](.claude/agents/vla-integrator.md).
-4. **Pose estimation at production accuracy** → keypoint detection sim-to-real gap is now closed (`vgg_ultimate_v4_mix_ft_e30`: ~99% synthetic / **91.6% real**, up from ~26%, via a mix-fine-tune on 50K synthetic + real_3cam×5 oversampled). Remaining gap is in **angle reconstruction**, not detection — see "DREAM pose-estimation — validation status" below. See [`.claude/skills/dream-workflow/SKILL.md`](.claude/skills/dream-workflow/).
+4. **Pose estimation at production accuracy** → detection on the pick bench is solved (`vgg_montage0901_ft_e30`, median 1.81 px, 100% detection). The open gaps are **angle reconstruction** and **viewpoint generalisation** — read "DREAM — September 2026 state" below *before* the July sections, which it supersedes on the model. See [`.claude/skills/dream-workflow/SKILL.md`](.claude/skills/dream-workflow/).
 5. **Robot training + standardized benchmarks** → a reproducible loop of (teleop demos → LeRobot dataset → VLA fine-tune → sim eval → real-robot eval). See [`.claude/skills/lerobot-dataset/SKILL.md`](.claude/skills/lerobot-dataset/).
 6. **POC-ready demonstrator** → a single-command launch that shows the full stack (digital twin + VLA policy + real robot + dashboard) running coherently.
 
@@ -45,7 +45,70 @@ This repo is not just a control-software project — it's the starting substrate
 
 ---
 
-## DREAM pose-estimation — validation status (2026-07-13)
+## DREAM — September 2026 state (read before the July sections below)
+
+The two July sections that follow are still accurate about the **dashboard**. On
+the **model** — what DREAM can be trusted to do — they are superseded by these
+measurements.
+
+- **Current checkpoint: `vgg_montage0901_ft_e30`** (fine-tuned from
+  `vgg_ultimate_v4_mix_ft_e30`, which is untouched). The 52 px systematic bias on
+  the pick bench is gone: median **53.82 → 1.81 px**, detection **54.8% → 100%**
+  on 800 held-out frames, no regression on `real_3cam`. Cause:
+  `synthetic_data_collector_v3.py:505` imposes `TABLE_CLEARANCE = 0.13 m`, which
+  rejected **100%** of the real pick poses (72.5–114.5 mm) — out-of-domain
+  extrapolation, closed with 1404 real poses.
+- **DREAM does not self-calibrate a camera that has moved.** The 2026-09-02
+  markerless demo (27.9 mm / 1.62°) was **invalidated the same day**: with this
+  checkpoint `base`, `link1` and `link2` are **constants per rig** — shifting the
+  image 30 px moves them 0% — so fitting a camera pose on them recovers the pose
+  implicit in the fine-tuning data. It is circular, and the low residual is low
+  *because* it is circular. On the SVPRO, the one camera that actually moved, it
+  fails (54.9 mm / 7.16°). Root cause: fine-tuning on two **fixed** cameras
+  rewarded reciting the base position. Minimal acceptance test before believing
+  any future claim: shift the image N px, the detection must follow N px.
+- **A held-out set must hold out a viewpoint, not just joint poses.** The 800
+  validation frames were 26° apart in joint space but all from one viewpoint —
+  they measured generalisation to arm poses, not to views.
+- **J6 confirmed structurally unobservable on the real robot**: FK displacement
+  of all 7 keypoints = 0.0000 mm over −52.6°…+46.7°. **J5 usable envelope: 0° to
+  −60°** (100% / ~6 px), falling to 42.9% / 47.7 px at −100°.
+- **`link1` and `link2` are the same 3D point in the FK** — two network outputs
+  for one physical point, inseparable whatever the camera or the view count.
+- **The pick does not go through DREAM** — it uses the ArUco marker extrinsic.
+  Only the multicam dashboard anchors on the memorised base.
+
+---
+
+## Precision and extrinsics — what the numbers actually mean (2026-09-09)
+
+- **The ±0.5 mm from Elephant Robotics is a *repeated positioning precision***, a
+  repeatability — **not** an absolute cartesian accuracy. `‖FK(q_read) − P_target‖`
+  aggregates joint reading, FK model, offsets, TCP, settling and frame changes;
+  it can neither confirm nor refute that spec.
+- Measured as **RP per ISO 9283** (not max deviation, which underestimates it),
+  **3 of 6 unidirectional series exceed ±0.5 mm** (up to 0.838 mm). The earlier
+  "the robot meets its spec" claim is retracted — it rested on the two best
+  series, judged on the wrong statistic.
+- **Approach direction dominates**: 5.918 mm bias across 4 directions, confirmed
+  three times by three protocols (5.847 · 5.88 on 20/08 · 5.918), within 0.07 mm.
+  Never mix approach directions between teaching a point and returning to it.
+- **The vision has no scale error.** The −3.25% read on a 50 mm ArUco is an
+  obliquity artifact — a 100 mm tag gives +0.005%. Drop the "−2.6% → 7.4 mm"
+  block from the slides.
+- **An extrinsic's `erreur_sol_rms_mm` is a fit residual, not an accuracy.**
+  Leave-one-out on the 09/09 calibration: **5.46 mm** at a point it was not
+  fitted on (12.25 mm at the furthest marker) against the 0.594 mm announced —
+  ≈9×. Probable cause: marker positions surveyed with a tape measure
+  (`workspace_markers.yaml` bounds itself at ±5 mm).
+- **The extrinsic goes stale.** On 09/09 the camera had moved 9.9 mm / 1.63°,
+  leaving 14.1 mm on the ground — 45% of the ball's radius. Recalibrate
+  (60 frames, 4 ArUco centres, SQPNP) at the start of any session that needs
+  millimetres. Extrinsics are **not committed**.
+
+---
+
+## DREAM pose-estimation — validation status (2026-07-13, superseded above on the model)
 
 Live validation tool: `ros2 run mycobot_gateway dream_validation_dashboard` — overlays DREAM's camera-only pose estimate against real encoder angles, with a per-joint MAE/RMS counter (cumulative over the session, not a rolling window) and a robust 2-pass + Kalman-filtered solver. Current checkpoint: `vgg_ultimate_v4_mix_ft_e30`.
 
@@ -108,6 +171,108 @@ joint_sync (/joint_states)  ·  bridge_tour (↔ Pi TCP 5005)                   
 
 ---
 
+## Gazebo — la réplique du banc réel (10/09/2026)
+
+`worlds/real_table.sdf` reproduit **le poste physique** et non une table
+générique : plateau **622 × 449 × 8,5 mm** aux dimensions mesurées, texture
+bois reconstruite depuis les photos du plan de travail, et les **quatre ArUco
+19 / 23 / 25 / 26 de 50 mm** aux positions relevées.
+
+```bash
+conda deactivate
+cd ~/ros_jazzy
+colcon build --packages-select mycobot_description mycobot_gateway --symlink-install
+source install/setup.bash
+ros2 launch mycobot_gateway real_table.launch.py
+```
+
+`conda deactivate` d'abord — sans quoi le Python 3.13 de conda masque
+celui de ROS2. Et le `colcon build` est nécessaire : sans lui `models/`
+n'est pas installé dans `share/` et **la scène se lance sans bois ni
+marqueurs**, sans message d'erreur.
+
+`demo:=true` exécute un cycle de préhension du cube rouge.
+`robot_appearance:=realistic` donne base grise et coques blanc satiné —
+**visuel uniquement** : meshes, origines visuelles, articulations, collisions,
+inerties et paramètres de contrôleur sont partagés inchangés, le rendu
+d'entraînement d'origine reste le défaut.
+
+⚠ **`mycobot_description/CMakeLists.txt` doit installer `models/`.** Sans cette
+ligne les `package://mycobot_description/models/...` ne se résolvent pas et la
+scène se lance **sans bois ni marqueurs**, silencieusement.
+
+Détail : [`docs/GAZEBO_REAL_TABLE.md`](docs/GAZEBO_REAL_TABLE.md) · provenance
+de la texture : [`models/wood_table/README.md`](mycobot_description/models/wood_table/README.md).
+
+---
+
+## Tri en simulation — deux pipelines, ne pas les confondre
+
+**`sim_sorting_grasp` est la référence** : saisie physique, pince réelle,
+contact par `gz_ros2_control`, prise vérifiée sur la pose Gazebo de l'objet.
+
+```bash
+# Terminal 1
+ros2 launch mycobot_gateway sim_grasp.launch.py
+# Terminal 2
+ros2 run mycobot_gateway sim_sorting_grasp --ros-args -p use_sim_time:=true
+```
+
+**L'issue de ce banc n'est pas déterministe** (mesuré 22/09, 7 cycles).
+`green_cylinder` sort du bac **4 fois sur 7**, et `blue_cube` une fois — alors
+que les six cycles instrumentés commandent une géométrie **identique** (φ = 120°
+partout, mêmes hauteurs). La divergence est dans le solveur de contact, pas dans
+la planification : écarts d'échec de 24 mm à 1 132 mm, signature d'une
+pénétration de contact. Conséquences pratiques :
+
+- **Ne jamais conclure sur moins de plusieurs cycles par version.** Trois cycles
+  ont donné 3 réussites d'affilée sur une version qui échoue 4 fois sur 7.
+- Deux causes ont été mesurées puis **écartées** : la marge des doigts (2,5 mm
+  de jeu par côté, ils ne touchent plus l'objet) et la flèche latérale de la
+  remontée (7,3 mm, ramenée à 0,33 mm par un escalier de paliers — sans effet
+  sur l'échec ; code annulé). Détail dans `docs/PICK_AND_PLACE_SIMULATION.md`.
+
+`sorting_orchestrator` et `pick_and_place_node` **n'attrapent rien** : ils
+téléportent l'objet par le service Gazebo `set_pose`. Si un objet **saute** au
+lieu d'être saisi, c'est qu'on est sur ce pipeline-là — ce n'est pas une panne.
+Antérieurs à la pince modélisée, conservés pour la perception (HSV +
+rétroprojection).
+
+⚠ `real_table.launch.py demo:=true` appelle bien `sim_sorting_grasp`, mais
+**bridé à `only: red_cube`**. Pour les quatre objets, passer par les deux
+terminaux ci-dessus.
+
+---
+
+## Précision — l'état du banc au 10/09/2026
+
+**La planche a bougé** : rotation **−1,750°**, translation **(18,8 · −6,5) mm**,
+mesuré sur les 4 marqueurs, résidu 0,39 mm, distances entre centres conservées
+à 0,14 %. **La caméra, elle, n'a pas bougé** — le trépied du fond n'a été
+déplacé que de 0,2 px dans l'image. Deux conséquences **opposées**, à ne pas
+confondre :
+
+- **`arducam_extrinsic_pick.yaml` reste VALABLE.** Le lien caméra ↔ base robot
+  est intact. **Ne pas la recalibrer** : la refaire contre des positions
+  nominales périmées y injecterait les 19 mm.
+- **`workspace_markers.yaml` est PÉRIMÉ.** Toute calibration qui s'appuie
+  dessus sera fausse de 12 à 28 mm selon le marqueur.
+
+**Les marqueurs font bien 50 mm.** Le −2,6 % qu'on mesure sur leurs côtés à
+l'image est un **biais de détection** lié à l'obliquité (r = −0,920), pas une
+erreur d'impression : les distances entre centres sont justes à −0,044 %. Une
+vraie erreur d'échelle frapperait les deux à l'identique. **Ne jamais corriger
+`marker_size_mm`** sur la foi d'une mesure optique.
+
+**Les extrinsèques ne valent que dans le plan de la table** (Z = 0) : tous les
+marqueurs d'étalonnage y sont. 1,92 mm en validation croisée deux caméras au
+sol, sans valeur à 17 cm de haut.
+
+Le protocole complet des treize essais, avec pour chacun sa norme, son mode
+opératoire, son résultat et ses supports :
+[`training/calibration/PROTOCOLE_ESSAIS_PRECISION.md`](training/calibration/PROTOCOLE_ESSAIS_PRECISION.md).
+
+
 ## Three Python environments — never mix them
 
 This is the single most common source of breakage. **Always know which env you are in.**
@@ -151,7 +316,8 @@ cd ~/ros_jazzy && colcon build --packages-select mycobot_gateway mycobot_descrip
 source install/setup.bash
 
 # Control a live robot (bridge must run on the Pi)
-ssh er@10.10.0.221        # Pi — start `python3 gripper_bridge.py` (voir avertissement ci-dessous)
+ssh er@10.10.0.224        # adresse non fixe : voir l'avertissement en tête de fichier
+                          # puis `python3 gripper_bridge.py` (voir avertissement ci-dessous)
 ros2 launch mycobot_gateway simple_gui.launch.py
 
 # Gazebo simulation
@@ -224,7 +390,7 @@ la connexion TCP est acceptée mais plus rien ne répond.
 
 ## Safety — real robot
 
-- Default IP is `10.10.0.221`. Always `ping` before launching anything that commands motion.
+- Config files say `10.10.0.224`, but **the Pi's address moves** (`.218` on 07/09, `.219` on 10/09). A successful `ping` proves nothing — `.224` answers it without serving the bridge. Confirm with a **TCP round-trip on port 5005** before launching anything that commands motion.
 - Run [`scripts/real_robot_preflight.sh`](scripts/real_robot_preflight.sh) before each physical session.
 - On `feature/teleoperation`: start every session with the `🐢 Safe start` preset (gains 0.6/0.6/0.6, tfs 0.3). Only go to `⚙️ Nominal` (1.2/1.2/1.6/0.25 — the validated default) once calibration is clean.
 - **Le robot a désormais une pince Pro adaptative** (`gripper_id=14`, ~1,6 s entre

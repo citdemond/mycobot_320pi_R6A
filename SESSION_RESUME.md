@@ -1,7 +1,6 @@
 # Reprise — pick adaptatif LIVE par démonstration
 
-## État actuel (9 septembre 2026 — soir, méthodologie et extrinsèque)
-> **Date de dernière mise à jour :** 9 septembre 2026 (méthodologie des essais de précision + validation extrinsèque par leave-one-out)
+> **Date de dernière mise à jour :** 3 octobre 2026 (démo pick-and-place GUI regardée sous WSL2, `run_gui_demo.sh`)
 > **Version :** 2.2.0 (téléop) · 1.10.0 (sorting) · 1.14.0 (calibration) · 1.15.2 (pick-and-place ArUco)
 > **Branche :** `main` (pick-and-place + DREAM mergés via PR #9 le 09/09/2026)
 > **Repository :** https://github.com/ABMI-software/mycobot_320pi_R6A
@@ -9,8 +8,284 @@
 
 ---
 
-## État actuel (9 septembre 2026 — soir, test des 4 directions)
-## État actuel (9 septembre 2026 — après-midi, campagne de précision)
+## État actuel (3 octobre 2026 — matin)
+
+### Ce qui a été accompli aujourd'hui
+
+**La démo GUI du POC headless a enfin été regardée.** Le §15 du rapport avait
+livré `pick_and_place_demo.launch.py` sans vérification visuelle (pas d'écran).
+Les 02–03/10, elle a été exécutée et observée de bout en bout dans Gazebo sur
+le portable WSL2, en partant de rien : démon Docker arrêté, ni image ni
+conteneur `gazebo_to_lerobot`. Le bras saisit le cube rouge et le pose sur
+l'assiette, à ~3 mm du centre ; `RESULT: motions_ok=True placed_on_plate=True
+grasp_held=True`, sans interface comme avec.
+
+**Cinq obstacles, tous mesurés et documentés** dans l'addendum §16–30 du
+rapport (EN/FR, HTML + Word) :
+- démon Docker à lancer à la main (`sudo sh -c 'nohup dockerd …'`), pas de
+  systemd dans WSL ;
+- `moveit_py` absent de l'image (`ros-jazzy-moveit` ne l'inclut pas) —
+  `run_demo.py` le présente comme « no reachable elbow-up IK solution » ;
+- simulation figée : le `DISPLAY=172.24.112.1:0` de l'hôte, transmis par
+  `run.sh`, bloque le capteur caméra et donc le pas de simulation
+  (contrôleurs jamais actifs) ; `DISPLAY=:0` (WSLg) corrige ;
+- fenêtre Gazebo blanche : D3D12 n'offre qu'OpenGL 4.1 sans compute shaders,
+  `ogre` comme `ogre2` ; llvmpipe (OpenGL 4.5, logiciel) corrige ;
+- vue minuscule qui se dézoome seule : mode Follow sur `mycobot_320`
+  (décalage 3 m / 2 m) et boîte englobante incluant le support de caméras.
+
+**`scripts/run_gui_demo.sh`** regroupe les trois corrections d'affichage, place
+la caméra près du bras et nettoie `move_group`/Gazebo à la sortie. Vérifié :
+démarrage, cadrage, contrôleurs actifs en 20–22 s, arrêt sans processus
+résiduel ; la séquence complète avec la version précédente du script (seule la
+sortie diffère).
+
+### Décisions prises
+
+- `Dockerfile`, `run.sh` et `run_demo.py` **non modifiés** : les corrections
+  vivent dans le script et dans les commandes documentées ; les trois
+  corrections permanentes sont proposées dans le rapport.
+- `moveit_py` installé dans le **conteneur**, pas dans l'image : un
+  `docker rm` le perd.
+
+### Prochaines actions
+1. [ROUGE] Faire reproduire la démo par José sur son poste avec l'addendum §16–30.
+2. [JAUNE] Appliquer les trois corrections permanentes (Dockerfile, run.sh, run_demo.py).
+3. [VERT] Ajouter les branches `*_tomislav_branch` à la carte de `.claude/rules/git-branching.md`.
+
+### Commande rapide de reprise
+```bash
+sudo sh -c 'nohup dockerd > /tmp/dockerd.log 2>&1 &'
+docker start gazebo_to_lerobot
+docker exec -it gazebo_to_lerobot /workspace/htgpp/run_gui_demo.sh
+```
+
+---
+
+## État actuel (22 septembre 2026 — mise au propre du dépôt)
+
+### Ce qui a été accompli aujourd'hui
+
+**La séance du 10/09 n'était documentée nulle part** — entrée ajoutée au
+CHANGELOG et ici (voir plus bas). `CLAUDE.md` décrivait encore l'état DREAM de
+juillet : ajout de deux sections de septembre (checkpoint `vgg_montage0901_ft_e30`,
+invalidation de la démo markerless, et ce que valent réellement les chiffres de
+précision et d'extrinsèque).
+
+**PR #12 inspectée** (Gazebo→LeRobot + ROS2→RLDS→OpenVLA, mergée le 22/09). Le
+contrat OpenVLA est respecté à la lettre (`state` 8-dim ↔ `POS_QUAT`, `action`
+7-dim ↔ `EEF_POS`) et l'enregistrement est réellement testé, pas affirmé :
+`test_openvla_transform.py` stubbe `prismatic` pour importer les vrais fichiers
+sans torch. Quatre réserves relevées, aucune bloquante pour une preuve de
+tuyauterie : la vérification FK est **une pose statique affichée, non assertée**
+(l'accord à 7 décimales implique un bras immobile à cet instant) ; la convention
+de repère du delta de rotation (`R_i⁻¹·R_j` = repère **outil**) n'est écrite
+nulle part ; le signe du gripper vient d'un visionnage, pas d'une calibration ;
+le recadrage 320×240 → 224² jette ~25 % du champ horizontal.
+
+**Une seule convention de nom pour les caméras secondaires : `right/left/top`.**
+Le dépôt en portait deux et **cinq fichiers de launch s'abonnaient à des topics
+sans publieur**. Voir CHANGELOG. Le correctif du 10/09 avait aligné les liens du
+mauvais côté de la scission.
+
+**Le conflit de la PR d'Osama est résolu.** Diagnostic : la branche a été
+réécrite après la PR #9, donc **142 de ses 161 commits sont des doublons** de
+commits déjà sur `main` (identiques au patch près, SHA différents) et la base de
+fusion remonte à juin. Les 27 fichiers en conflit portaient presque tous deux
+fois la même modification. Résolu par fusion (pas de réécriture, pas de
+force-push) dont l'arbre a été obtenu en rejouant les **19 commits réellement
+nouveaux** sur `main` — apport net vérifié identique, 44 fichiers.
+
+**Le banc de préhension ne se lançait plus depuis le 10/09** :
+`sim_grasp.launch.py` échouait au chargement sur une `PathJoinSubstitution`
+contenant une liste imbriquée. Corrigé, puis les 22 autres fichiers de launch
+chargés un à un — aucun ne porte la même construction. Le défaut arrivait avec
+la branche d'Osama, il n'a donc jamais atteint `origin/main`.
+
+**Le cycle de tri a tourné pour de vrai — 9 cycles au total — et son issue
+n'est pas déterministe.** `green_cylinder` sort du bac 4 fois sur 7 avec la
+remontée verticale, 2 fois sur 2 sans, et `blue_cube` a échoué une fois. Les six
+cycles instrumentés commandent pourtant une géométrie **identique** (φ = 120°
+partout) : la divergence est dans le solveur de contact de Gazebo, pas dans la
+planification. Deux causes mesurées puis écartées : la marge des doigts
+(2,5 mm de jeu par côté) et la flèche latérale de la remontée (7,3 mm ramenée
+à 0,33 mm par un escalier de paliers — sans effet, code annulé).
+
+**J'avais d'abord conclu à une dépendance à l'ordre de tri** sur la foi de
+φ = 120° aux échecs contre 105° à la réussite. Trois échantillons, une
+coïncidence. C'est corrigé partout, et la leçon est consignée : sur ce banc,
+trois cycles ne départagent pas deux versions du code.
+
+### Décisions prises
+
+- **Les classeurs `.xlsx` deviennent commitables sur approbation explicite**,
+  au lieu d'être interdits. Motif : un classeur est opaque au diff, donc celui
+  qui le commite se porte garant de son contenu. `precision_campagne_2026-09-09.xlsx`
+  reste donc dans la PR d'Osama.
+- **`right/left/top`** l'emporte sur `_1/2/3` pour les caméras.
+- **Fusion plutôt que rebase** pour la PR d'Osama : la règle de branchement
+  interdit de réécrire une branche en relecture.
+- Sur le conflit du chemin IK, **la version d'Osama l'emporte** : son
+  `_dossier_dream()` cherche le *fichier* `mycobot_ik.py` et supprime le chemin
+  absolu codé en dur vers le home d'un tiers.
+
+### Prochaines actions
+
+1. [ROUGE] **Pousser `main`** — et rien d'autre : la tête de la PR d'Osama
+   (`28a859d7`) est déjà accessible depuis `main`, GitHub fermera donc la PR
+   comme *merged* sans qu'on pousse sa branche.
+2. [ROUGE] **Le cylindre sort du bac 4 fois sur 7, au hasard.** La géométrie
+   étant identique d'un cycle à l'autre, chercher du côté de la **physique** :
+   paramètres de contact du cylindre et des parois dans
+   `pick_and_place_sorting.sdf`, pas du côté de la trajectoire. Les éjections
+   métriques (jusqu'à 1 132 mm) sont une signature de pénétration.
+3. [FAIT] **Rejouer le tri en simulation** — fait le 22/09, deux cycles
+   complets, résultats identiques (3/4).
+4. [FAIT] **Quel côté mérite le nom « droite »** — tranché le 22/09 en faveur
+   du point de vue de l'opérateur (debout en +X, regardant le robot) : +Y est à
+   sa droite. Les noms de joints n'avaient pas à changer ; la convention est
+   maintenant écrite dans le URDF et `README_GAZEBO.md`.
+5. [JAUNE] **Débloquer rosbridge côté système** (désalignement ABI `fastcdr`).
+6. [VERT] Reprendre les actions du 09/09, aucune n'a avancé : affaissement à
+   3 portées, cas *outil couché* du scotch, éclairage à 86 de luminance.
+
+### Commande rapide de reprise
+
+```bash
+git push origin main
+
+# rejouer le tri (deux terminaux, conda desactive)
+ros2 launch mycobot_gateway sim_grasp.launch.py headless:=true
+ros2 run mycobot_gateway sim_sorting_grasp --ros-args -p use_sim_time:=true
+```
+
+---
+
+## État précédent (10 septembre 2026 — après-midi, Gazebo réaliste et protocole d'essais)
+
+### Ce qui a été accompli aujourd'hui
+
+**La simulation reproduit enfin le banc réel.** `worlds/real_table.sdf` ne pose
+plus une table générique mais le plateau mesuré — 622 × 449 × 8,5 mm — avec sa
+texture bois reconstruite depuis les photos, et les quatre ArUco de 50 mm aux
+positions relevées. Une apparence réaliste du robot est disponible en option
+(`robot_appearance:=realistic`), strictement visuelle.
+
+**Le protocole d'essais de précision est indexé.**
+`training/calibration/PROTOCOLE_ESSAIS_PRECISION.md` relie chacun des treize
+essais à sa norme, son mode opératoire, son résultat et ses quatre supports
+(les deux MD, l'onglet du classeur, la section du rapport).
+
+**Une conclusion fausse a été retirée.** Les marqueurs ArUco font bien 50 mm.
+Le −2,6 % mesuré sur leurs côtés est un biais de détection lié à l'obliquité
+(r = −0,920), pas une erreur d'impression : les distances entre centres, elles,
+sont justes à −0,044 %. Une vraie erreur d'échelle frapperait les deux à
+l'identique.
+
+**Le tri de référence est celui à saisie physique.** `sim_sorting_grasp` ferme
+réellement la pince et vérifie chaque prise sur la pose Gazebo de l'objet.
+`sorting_orchestrator`, qui téléporte l'objet par `set_pose`, est rétrogradé —
+c'est lui qui fait « sauter » l'objet, et la documentation le présentait
+jusqu'ici comme le seul pipeline de tri.
+
+### Décisions prises
+
+- **Ne pas recalibrer l'extrinsèque arducam.** La planche a bougé le 10/09
+  (rotation −1,750°, translation 18,8 / −6,5 mm, résidu 0,39 mm) mais **pas la
+  caméra** — le trépied du fond n'a bougé que de 0,2 px. Le lien caméra ↔ base
+  robot est donc intact ; refaire l'ajustement contre des positions nominales
+  périmées y injecterait les 19 mm.
+- **`workspace_markers.yaml` est périmé** et doit être considéré comme tel par
+  toute calibration future.
+- **Le protocole du stylo est abandonné.** Faire tracer un point au robot pour
+  mesurer la justesse contre une croix demandait un appui dont l'amplitude
+  n'était pas maîtrisable : le stylo a ripé et est sorti de la pince.
+
+### Prochaines actions
+
+1. **[ROUGE]** Mesurer un marqueur **au pied à coulisse**. C'est l'artefact
+   étalonné qu'exige VDI/VDE 2634-1, et son absence est exactement ce qui a
+   laissé vivre deux jours la conclusion fausse sur la taille des tags.
+2. **[ROUGE]** Le bridge de la Pi est tombé **deux fois** en une heure pendant
+   des séquences de mouvement (`Connection refused` ensuite). Regarder ce qu'il
+   affiche sur la Pi au moment où il meurt.
+3. **[JAUNE]** Recalibrer avec des marqueurs **à plusieurs hauteurs** : les
+   extrinsèques ne valent aujourd'hui que dans le plan Z = 0.
+4. **[JAUNE]** Remonter dans le dépôt les scripts d'essai restés dans le
+   répertoire de session — **onze essais sur treize ne sont pas rejouables**.
+5. **[VERT]** ISO 9283 § 7.3, exactitude et répétabilité de **distance** : la
+   seule caractéristique normalisée qu'une mesure aux codeurs puisse rapporter
+   en valeur vraie, un décalage constant s'annulant dans la différence.
+
+### Commande rapide de reprise
+
+```bash
+conda deactivate
+cd ~/ros_jazzy && colcon build --packages-select mycobot_description mycobot_gateway --symlink-install
+source install/setup.bash
+ros2 launch mycobot_gateway real_table.launch.py robot_appearance:=realistic
+```
+
+---
+
+## État précédent (10 septembre 2026 — remise en marche du dépôt après la PR #9)
+
+*Entrée écrite le 22/09 : la séance du 10/09 n'avait été documentée nulle part,
+ni ici ni dans le CHANGELOG. Elle ne contient aucune mesure — uniquement la
+réparation de trois régressions d'intégration introduites par le merge.*
+
+### Ce qui a été accompli
+
+**Trois régressions post-PR #9 corrigées, chacune empêchait un lancement.**
+
+1. **7 nœuds ne trouvaient plus `training/dream`.** Ils remontaient 4 niveaux
+   depuis `os.path.abspath(__file__)` — donc hors du dépôt — et sans `realpath`
+   ne suivaient pas le symlink de `colcon --symlink-install`. Résultat :
+   `ModuleNotFoundError` (`mycobot_ik`, `mycobot_fk`) au lancement de
+   `sorting_orchestrator`, `pick_and_place_aruco`, `precision_benchmark`…
+   Alignés sur le motif déjà correct de `dream_inference_node.py`.
+2. **Le robot ne se chargeait plus dans Gazebo.** Les joints
+   `world_to_camera_right/left/top` référençaient des liens
+   `camera_link_right/left/top` inexistants (les liens définis sont
+   `camera_link_1/2/3`) : `robot_state_publisher` échouait au parsing URDF.
+   Résidu de la résolution de conflit de la PR #9, où la version des joints a
+   été gardée sans aligner les noms de liens.
+3. **Toute la stack sim tombait au lancement.** Le commit `bc5ddbe6` avait
+   ré-écrasé l'include rosbridge avec `PythonLaunchDescriptionSource`, qui ne
+   sait pas parser un `.xml`. `AnyLaunchDescriptionSource` restauré pour
+   rosbridge, `PythonLaunchDescriptionSource` gardé pour `gz_sim.launch.py`.
+
+### Décisions prises
+
+- **Ne pas traiter le blocage rosbridge dans le dépôt.** Le désalignement ABI
+  `fastcdr` (`symbol lookup error`) est au niveau de `/opt/ros/jazzy` : il se
+  corrige côté système (apt), pas par un correctif de launch.
+
+### Prochaines actions
+
+1. [ROUGE] **Débloquer rosbridge côté système** (ABI `fastcdr`) — sans lui, la
+   chaîne de téléop reste inutilisable même avec le launch réparé.
+2. [ROUGE] **Reprendre les prochaines actions du 09/09**, aucune n'a avancé
+   depuis : affaissement à 3 portées, cas *outil couché* du scotch, éclairage
+   remonté à 86 de luminance avant toute calibration visant 0,12 mm.
+3. [JAUNE] **Mettre à jour les supports de présentation** avec les verdicts
+   révisés du 09/09 (retrait du bloc échelle, répétabilité en RP ISO 9283).
+
+### Commande rapide de reprise
+
+```bash
+conda deactivate
+cd ~/ros_jazzy && colcon build --packages-select mycobot_gateway mycobot_description --symlink-install
+source install/setup.bash
+ros2 launch mycobot_gateway mycobot_teleop.launch.py target:=sim
+```
+
+---
+
+## État précédent (9 septembre 2026 — soir, méthodologie et extrinsèque)
+
+## État précédent (9 septembre 2026 — soir, test des 4 directions)
+## État précédent (9 septembre 2026 — après-midi, campagne de précision)
 
 ### Ce qui a été accompli
 
@@ -156,7 +431,7 @@ cd ~/Osama_ws/src/mycobot_R6A
 env -u VIRTUAL_ENV MYCOBOT_PI=10.10.0.219 /usr/bin/python3 scripts/pick_dashboard.py
 ```
 
-## État actuel (2 septembre 2026 — soir, la démo markerless est invalidée)
+## État précédent (2 septembre 2026 — soir, la démo markerless est invalidée)
 
 ### Ce qui a été accompli
 
@@ -200,7 +475,7 @@ python scripts/dream_extrinseque_markerless.py \
     --capture training/dream/captures/markerless_0902 --cameras arducam,svpro
 ```
 
-## État actuel (2 septembre 2026 — après-midi, DREAM markerless démontré)
+## État précédent (2 septembre 2026 — après-midi, DREAM markerless démontré)
 Branche active : **`feature/calibration-cam`**. Deux Arducams calibrées (intrinsèques mesurés). Plan validé :
 
 - **Point 2 — Régénérer les GT** du dataset `/tmp/dream_data/real_cam0/` avec les K mesurés au lieu des `fx=fy=610` codés en dur. Les fichiers JSON NDDS contiennent les `projected_location` calculées avec la mauvaise matrice. À recalculer avec FK + nouveaux `K`. Voir [`training/dream/convert_to_ndds.py`](training/dream/convert_to_ndds.py).
@@ -428,7 +703,7 @@ python scripts/dream_extrinseque_markerless.py \
     --capture training/dream/captures/markerless_0902 --cameras arducam
 ```
 
-## État actuel (2 septembre 2026 — matin, le biais DREAM est corrigé)
+## État précédent (2 septembre 2026 — matin, le biais DREAM est corrigé)
 
 ### Ce qui a été accompli
 
@@ -492,7 +767,7 @@ cd training/dream && python3 evaluate_dream.py \
 
 ---
 
-## État actuel (1er septembre 2026 — soir, verdict sur DREAM au pick)
+## État précédent (1er septembre 2026 — soir, verdict sur DREAM au pick)
 
 ### Le résultat
 
@@ -539,7 +814,7 @@ python3 scripts/fk_vs_dream_series.py --balayage # LE BRAS BOUGE
 
 ---
 
-## État actuel (1er septembre 2026 — le biais DREAM est chiffré)
+## État précédent (1er septembre 2026 — le biais DREAM est chiffré)
 
 ### Ce qui a été accompli
 
@@ -632,7 +907,7 @@ python3 scripts/fk_vs_dream_series.py --n 4   # LE BRAS BOUGE
 
 ---
 
-## État actuel (31 août 2026 — nuit, FK validée contre DREAM)
+## État précédent (31 août 2026 — nuit, FK validée contre DREAM)
 
 ### Ce qui a été accompli
 
@@ -683,7 +958,7 @@ python3 scripts/fk_vs_dream_diagnostic.py --brut \
 
 ---
 
-## État actuel (31 août 2026 — soir, self-calibration markerless)
+## État précédent (31 août 2026 — soir, self-calibration markerless)
 
 ### Ce qui a été accompli
 
@@ -747,7 +1022,7 @@ python scripts/pick_and_place_live_dashboard.py --calib-only --move   # LE BRAS 
 
 ---
 
-## État actuel (31 août 2026 — simulation, saisie physique)
+## État précédent (31 août 2026 — simulation, saisie physique)
 
 ### Ce qui a été accompli aujourd'hui
 
@@ -842,7 +1117,7 @@ ros2 run mycobot_gateway sim_sorting_grasp          # -p only:="red_cube"
 
 ---
 
-## État actuel (28 août 2026 — après-midi)
+## État précédent (28 août 2026 — après-midi)
 
 ### Ce qui a été accompli aujourd'hui
 
@@ -909,7 +1184,7 @@ cd ~/Osama_ws/src/mycobot_R6A
 /usr/bin/python3 scripts/pick_dashboard.py
 ```
 
-## État actuel (28 août 2026 — soir, simulation)
+## État précédent (28 août 2026 — soir, simulation)
 
 ### Ce qui a été accompli
 
@@ -964,7 +1239,7 @@ source /opt/ros/jazzy/setup.bash && source ~/Osama_ws/install/setup.bash
 ros2 launch mycobot_gateway pick_and_place_sorting.launch.py
 ```
 
-## État actuel (28 août 2026 — matin)
+## État précédent (28 août 2026 — matin)
 
 ### Ce qui a été accompli aujourd'hui
 
@@ -1024,7 +1299,7 @@ cd ~/Osama_ws/src/mycobot_R6A
 /usr/bin/python3 scripts/pick_dashboard.py
 ```
 
-## État actuel (27 août 2026 — soir)
+## État précédent (27 août 2026 — soir)
 
 ### Ce qui a été accompli aujourd'hui
 
@@ -1106,7 +1381,7 @@ setsid nohup /usr/bin/python3 scripts/pick_dashboard.py > /tmp/dash.log 2>&1 &
 tail -f /tmp/dash.log        # le journal sort maintenant du tableau de bord
 ```
 
-## État actuel (27 août 2026 — après-midi)
+## État précédent (27 août 2026 — après-midi)
 
 ### Ce qui a été accompli aujourd'hui
 
@@ -1174,7 +1449,7 @@ cd ~/Osama_ws/src/mycobot_R6A
 setsid nohup /usr/bin/python3 scripts/pick_dashboard.py >/dev/null 2>&1 &
 ```
 
-## État actuel (26 août 2026 — soir)
+## État précédent (26 août 2026 — soir)
 
 ### Ce qui a été accompli aujourd'hui
 
@@ -1238,7 +1513,7 @@ cd ~/Osama_ws/src/mycobot_R6A
 setsid nohup /usr/bin/python3 scripts/pick_dashboard.py >/dev/null 2>&1 &
 ```
 
-## État actuel (25 août 2026 — matin)
+## État précédent (25 août 2026 — matin)
 
 ### Ce qui a été accompli aujourd'hui
 
@@ -1340,7 +1615,7 @@ cd ~/Osama_ws/src/mycobot_R6A
 
 ---
 
-## État actuel (24 août 2026 — soir)
+## État précédent (24 août 2026 — soir)
 
 ### Ce qui a été accompli aujourd'hui
 
@@ -1414,7 +1689,7 @@ cd ~/Osama_ws/src/mycobot_R6A
 /usr/bin/python3 scripts/pick_dashboard.py
 ```
 
-## État actuel (24 août 2026 — journée)
+## État précédent (24 août 2026 — journée)
 
 ### Ce qui a été accompli aujourd'hui
 
@@ -1466,7 +1741,7 @@ conda deactivate
 
 ---
 
-## État actuel (20 août 2026 — après-midi)
+## État précédent (20 août 2026 — après-midi)
 
 **Cycle pick-and-place complet réussi sur le robot réel**, de la localisation par
 vision au dépôt en bac vérifié par image.
@@ -1673,7 +1948,7 @@ La transaction produite était seulement une sonde temporaire :
   `marker_size_m: 0.080` contre commentaire `50 mm`. La frontière actuelle
   utilise les centres et n'utilise pas cette taille, mais elle devra être
   mesurée/corrigée avant un futur PnP par coins.
-## État actuel (9 juin 2026 — soir — calibration main-œil sur robot réel)
+## État précédent (9 juin 2026 — soir — calibration main-œil sur robot réel)
 
 ### Ce qui a été accompli aujourd'hui
 
@@ -1801,7 +2076,7 @@ source ~/ros_jazzy/install/setup.bash
 
 ---
 
-## État actuel (3 juin 2026 — nuit — pick-and-place Gazebo visual debug)
+## État précédent (3 juin 2026 — nuit — pick-and-place Gazebo visual debug)
 
 ### Ce qui a été accompli (session de débogage visuel Gazebo)
 
@@ -1850,7 +2125,7 @@ ros2 launch mycobot_gateway pick_and_place_aruco.launch.py
 
 ---
 
-## État actuel (3 juin 2026 — soir — pick-and-place Gazebo validé)
+## État précédent (3 juin 2026 — soir — pick-and-place Gazebo validé)
 
 ### Ce qui a été accompli aujourd'hui
 
@@ -1889,7 +2164,7 @@ ros2 launch mycobot_gateway pick_and_place_aruco_real.launch.py
 
 ---
 
-## État actuel (3 juin 2026 — pick-and-place ArUco scaffoldé)
+## État précédent (3 juin 2026 — pick-and-place ArUco scaffoldé)
 
 ### 🧭 Prochaine action prioritaire
 
@@ -1903,7 +2178,7 @@ ros2 launch mycobot_gateway pick_and_place_aruco_real.launch.py
 
 ---
 
-## État actuel (28 avril 2026 — soir)
+## État précédent (28 avril 2026 — soir)
 
 ### Ce qui a été accompli
 
