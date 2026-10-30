@@ -220,8 +220,12 @@ class StepLock:
     def locked_action(self, grip, waypoint=None):
         """One action period: the gripper command confirmed at the first controller update, then
         the rest of the period. `waypoint`, the arm trajectory's point at the end of this period,
-        must be exactly what the arm controller commands at the update landing on it (the period's
-        last), as introspection reports it; anything else stops the run."""
+        must be exactly what the arm controller commands at the update landing on it, as
+        introspection reports it; anything else stops the run. All ten updates of the period must
+        be read back. The arm controller fixes a new trajectory's starting point at the first
+        update after it arrives, so its first segment lasts nine updates and every waypoint lands
+        on the ninth update of its period (30/10: -0.0016277 x 9 = -0.0146494, the waypoint to the
+        bit); which update it was is kept as waypoint_update."""
         self.send_gripper(grip)
         self.deliver()
         since = self.introspection_count
@@ -237,12 +241,15 @@ class StepLock:
             # command, arm commands): kept in the trace, outside the fingerprint.
             self.period_commands = [[n, held.get(GRIPPER_JOINTS[0]), [held.get(j) for j in ARM_JOINTS]]
                                     for n, held in samples]
-            if want is None or (len(samples) >= TICK_NS // CONTROL_NS and self.period_commands[-1][2] == want):
+            arm = [c[2] for c in self.period_commands]
+            if want is None:
+                return
+            if len(samples) >= TICK_NS // CONTROL_NS and want in arm:
+                self.waypoint_update = arm.index(want) + 1
                 return
             if time.monotonic() > deadline:
-                raise RuntimeError(f'step-locked: arm command at the waypoint update '
-                                   f'{self.period_commands[-1][2] if samples else None}, waypoint {want} '
-                                   f'({len(samples)} updates read back)')
+                raise RuntimeError(f'step-locked: no controller update commands the waypoint {want} '
+                                   f'({len(samples)} updates read back: {arm}; time now {self.now_ns()} ns)')
             rclpy.spin_once(self, timeout_sec=0.01)
 
     def gz_sim_ns(self):

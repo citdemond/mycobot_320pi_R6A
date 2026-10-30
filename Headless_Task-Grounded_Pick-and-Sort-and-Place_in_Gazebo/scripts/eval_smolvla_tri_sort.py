@@ -296,7 +296,7 @@ def run_piece_locked(node, model, target, args, out, snap, attempt=1):
                 trace.append({'t_ns': node.now_ns() - start_t, 'chunk': chunks, 'state': state,
                               'action': [float(v) for v in a], 'tip': np.round(tool_tip(np.degrees(state[:6])), 4).tolist(),
                               'full': {key: full[key] for key in ('positions', 'velocities', 'pieces')},
-                              'commands': node.period_commands})
+                              'commands': node.period_commands, 'waypoint_update': node.waypoint_update})
                 if k % 5 == 4:
                     poses.append({'t_ns': node.now_ns() - start_t,
                                   'poses': {m: p.tolist() for m, p in node.object_poses().items()}})

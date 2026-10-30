@@ -166,7 +166,7 @@ print(e if e.startswith('step-locked:') else '')" "$OUT/result_$name.json" 2>/de
             fi
             server_down
             [ -z "$stop" ] && break
-            if [ $attempt -gt 3 ]; then stage "FATAL: $name stopped after 3 restarts: $stop"; exit 1; fi
+            if [ $attempt -gt "${RESTARTS:-3}" ]; then stage "FATAL: $name stopped after ${RESTARTS:-3} restarts: $stop"; exit 1; fi
             echo "[$(TZ=Europe/Paris date +%H:%M:%S)] $name: restart $attempt after $stop" | tee -a "$OUT/restarts.log"
             cp "$OUT/result_$name.json" "$OUT/result_$name.attempt$attempt.json" 2>/dev/null || true
             attempt=$((attempt + 1))
