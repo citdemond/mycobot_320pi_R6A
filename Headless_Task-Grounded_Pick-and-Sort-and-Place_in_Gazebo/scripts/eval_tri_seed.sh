@@ -185,8 +185,10 @@ print(f"{sys.argv[2]}: {len(stopped)} steps, {'reproduced' if same else 'NOT rep
 sys.exit(0 if same else 1)
 EOF
         done
-        stage "$name done: $(python3 -c "import json,sys; p=json.load(open(sys.argv[1]))['pieces'][0]; \
-print(p.get('error') or ('sorted' if p.get('placed_after_pick') else 'picked' if p.get('picked') else 'not picked'))" "$OUT/result_$name.json")"
+        stage "$name done: $(python3 -c "import json,sys; p=json.load(open(sys.argv[1]))['pieces'][0]; tr=p.get('tracking', {}); \
+print(p.get('error') or ('sorted' if p.get('placed_after_pick') else 'picked' if p.get('picked') else 'not picked'), \
+'| tracking median', tr.get('median_deg'), 'deg, fast periods', tr.get('fast_periods'), \
+'ACCEPTED' if tr.get('accepted') else 'NOT ACCEPTED')" "$OUT/result_$name.json")"
     }
 
     ALL=(cube_rouge pave_jaune cylindre_vert cube_bleu)          # TRI_TARGETS order

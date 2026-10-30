@@ -40,7 +40,6 @@ from pathlib import Path
 import numpy as np
 import rclpy
 from builtin_interfaces.msg import Duration, Time
-from control_msgs.srv import QueryTrajectoryState
 from pal_statistics_msgs.msg import Statistics
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import JointState
@@ -91,13 +90,15 @@ class StepLock:
         self.t_ns = None
         # Read-back of what the controllers send to the robot: the controller manager's
         # introspection (BEST_EFFORT publisher, one sample per controller update, stamped with the
-        # simulation time), and the arm controller's query_state service.
+        # simulation time). Passive only: no controller service is ever called once locked. The
+        # arm controller's query_state samples the live trajectory and moves its search index
+        # (search_monotonically_increasing), so asking it about a chunk's middle and last points
+        # sent the arm straight to the chunk's last point at its speed limit (30/10, test A).
         self.introspection = []        # (arrival number, {joint: commanded position})
         self.introspection_count = 0
         self.create_subscription(Statistics, '/controller_manager/introspection_data/full', self._introspection_cb,
                                  QoSProfile(depth=50, reliability=ReliabilityPolicy.BEST_EFFORT,
                                             history=HistoryPolicy.KEEP_LAST))
-        self.query_state = self.create_client(QueryTrajectoryState, '/mycobot_controller/query_state')
 
     def _introspection_cb(self, msg):
         # Identified by arrival order, not by its stamp: the controller nodes stamp with their ROS
@@ -193,14 +194,11 @@ class StepLock:
         raw = [-a, a, a, -a, -a, a]
         return {j: float(np.clip(v, lo, hi)) for j, v, (lo, hi) in zip(GRIPPER_JOINTS, raw, GRIPPER_LIMITS)}
 
-    def confirm(self, since, grip, arm_points=(), arm_command=None):
+    def confirm(self, since, grip, arm_command=None):
         """Handshake after the controller update that consumed the commands. Among the
         introspection samples that arrived after `since` (an arrival number taken before the block
         was started), one must show exactly `grip`'s six gripper commands (and, with arm_command,
-        the arm's six commands within 1e-9: a hold trajectory ending at this update); every
-        (time ns, 6 positions) of arm_points must be what the arm controller's trajectory gives at
-        that time (query_state, within 1e-9; it does not sample a trajectory's final point, which it
-        treats as the end: the caller checks the first, middle and second-to-last). Anything
+        the arm's six commands within 1e-9: a hold trajectory ending at this update). Anything
         missing or different stops the run."""
         want = self.gripper_command(grip)
         if arm_command is not None:
@@ -213,47 +211,39 @@ class StepLock:
                     last = held
                     if all(held.get(j) is not None and abs(held[j] - v) <= (0.0 if j in GRIPPER_JOINTS else 1e-9)
                            for j, v in want.items()):
-                        break
-            else:
-                if time.monotonic() > deadline:
-                    raise RuntimeError(f'step-locked: no controller read-back matching the commands sent '
-                                       f'(last sample {last}, wanted {want})')
-                rclpy.spin_once(self, timeout_sec=0.01)
-                continue
-            break
-        for at, q in arm_points:
-            if not self.query_state.wait_for_service(timeout_sec=30.0):
-                raise RuntimeError('step-locked: /mycobot_controller/query_state unavailable')
-            future = self.query_state.call_async(QueryTrajectoryState.Request(
-                time=Time(sec=at // 1_000_000_000, nanosec=at % 1_000_000_000)))
-            end = time.monotonic() + CONFIRM_TIMEOUT_S
-            while not future.done():
-                if time.monotonic() > end:
-                    raise RuntimeError('step-locked: query_state did not answer')
-                rclpy.spin_once(self, timeout_sec=0.01)
-            r = future.result()
-            got = dict(zip(r.name, r.position)) if r.success else {}
-            off = {j: (got.get(j), float(v)) for j, v in zip(ARM_JOINTS, q)
-                   if got.get(j) is None or abs(got[j] - float(v)) > 1e-9}
-            if off:
-                raise RuntimeError(f'step-locked: arm controller does not hold the trajectory sent at {at} ns '
-                                   f'({r.message!r}): {off}')
+                        return
+            if time.monotonic() > deadline:
+                raise RuntimeError(f'step-locked: no controller read-back matching the commands sent '
+                                   f'(last sample {last}, wanted {want})')
+            rclpy.spin_once(self, timeout_sec=0.01)
 
-    def locked_action(self, grip, arm_points=()):
-        """One action period: commands confirmed at the first controller update, then the rest."""
+    def locked_action(self, grip, waypoint=None):
+        """One action period: the gripper command confirmed at the first controller update, then
+        the rest of the period. `waypoint`, the arm trajectory's point at the end of this period,
+        must be exactly what the arm controller commands at the update landing on it (the period's
+        last), as introspection reports it; anything else stops the run."""
         self.send_gripper(grip)
         self.deliver()
         since = self.introspection_count
         first = CONTROL_NS // STEP_NS
         self.step(first)
-        self.confirm(since, grip, arm_points)
+        self.confirm(since, grip)
         self.step(TICK_NS // STEP_NS - first)
-        # What the controllers held at each update of this period, as far as their BEST_EFFORT
-        # introspection delivered it (arrival number, gripper command, arm commands): a command
-        # changing inside a period shows here, the first-update read-back cannot see it.
-        self._drain(0.2)
-        self.period_commands = [[n, held.get(GRIPPER_JOINTS[0]), [held.get(j) for j in ARM_JOINTS]]
-                                for n, held in self.introspection if n > since]
+        want = None if waypoint is None else [float(v) for v in waypoint]
+        deadline = time.monotonic() + CONFIRM_TIMEOUT_S
+        while True:
+            samples = [(n, held) for n, held in self.introspection if n > since]
+            # What the controllers held at each update of this period (arrival number, gripper
+            # command, arm commands): kept in the trace, outside the fingerprint.
+            self.period_commands = [[n, held.get(GRIPPER_JOINTS[0]), [held.get(j) for j in ARM_JOINTS]]
+                                    for n, held in samples]
+            if want is None or (len(samples) >= TICK_NS // CONTROL_NS and self.period_commands[-1][2] == want):
+                return
+            if time.monotonic() > deadline:
+                raise RuntimeError(f'step-locked: arm command at the waypoint update '
+                                   f'{self.period_commands[-1][2] if samples else None}, waypoint {want} '
+                                   f'({len(samples)} updates read back)')
+            rclpy.spin_once(self, timeout_sec=0.01)
 
     def gz_sim_ns(self):
         """Gazebo's own simulation time (its /stats), independent of the ROS /clock relay."""

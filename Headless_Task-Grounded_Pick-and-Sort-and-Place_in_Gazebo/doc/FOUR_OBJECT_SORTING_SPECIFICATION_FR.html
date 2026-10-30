@@ -503,10 +503,32 @@ main a { color: var(--accent); }
 <h3 style="margin-top:26px;font-size:1.1rem">2.1 Pourquoi c’est la première étape</h3>
 <p class="prose">A1 n’est pas tranchée, et chaque chiffre suivant de cette spécification — poses des objets, hauteur de la table, enveloppe accessible, topics caméra — est lu dans le monde qui s’avérera être la cible. Deviner coûte une semaine.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">2.2 Localiser les candidats</h3>
-<pre>cd &lt;repository root&gt;# every world file, newest firstfind . -name "*.sdf" -path "*world*" -printf '%T@ %p\n' 2&gt;/dev/null \  | sort -rn | cut -d' ' -f2-# the reference pipeline named in A4find . -name "sim_grasp.launch.py" -o -name "*gateway*" -type d# model directoriesfind . -type d \( -name "*cube*" -o -name "*bin*" -o -name "*cylinder*" \) | head -20</pre>
+<pre>cd &lt;repository root&gt;
+
+# every world file, newest first
+find . -name "*.sdf" -path "*world*" -printf '%T@ %p\n' 2&gt;/dev/null \
+  | sort -rn | cut -d' ' -f2-
+
+# the reference pipeline named in A4
+find . -name "sim_grasp.launch.py" -o -name "*gateway*" -type d
+
+# model directories
+find . -type d \( -name "*cube*" -o -name "*bin*" -o -name "*cylinder*" \) | head -20</pre>
 <p class="prose">Noter lesquels des éléments cités dans A3 sont présents et lesquels ne le sont pas.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">2.3 Énumérer le contenu de chaque candidat</h3>
-<pre>for w in $(find . -name "*.sdf" -path "*world*" 2&gt;/dev/null); do  echo "=========================================================="  echo "WORLD: $w"  echo "-- models declared:"  grep -oP '&lt;model name="\K[^"]+' "$w" | sort -u | tr '\n' ' '; echo  echo "-- included uris:"  grep -oP '&lt;uri&gt;\K[^&lt;]+' "$w" | sort -u | head -20  echo "-- aruco ids:      $(grep -oP 'aruco_\K[0-9]+' "$w" | sort -un | tr '\n' ' ')"  echo "-- camera sensors: $(grep -c 'sensor .*type="camera"' "$w")"  echo "-- camera names:   $(grep -oP '&lt;sensor name="\K[^"]+' "$w" | tr '\n' ' ')"  echo "-- textured:       $(grep -ci 'albedo_map\|&lt;texture\|\.png\|\.jpg' "$w")"  echo "-- static bins:    $(grep -A6 '_bin"' "$w" | grep -c '&lt;static&gt;true')"done</pre>
+<pre>for w in $(find . -name "*.sdf" -path "*world*" 2&gt;/dev/null); do
+  echo "=========================================================="
+  echo "WORLD: $w"
+  echo "-- models declared:"
+  grep -oP '&lt;model name="\K[^"]+' "$w" | sort -u | tr '\n' ' '; echo
+  echo "-- included uris:"
+  grep -oP '&lt;uri&gt;\K[^&lt;]+' "$w" | sort -u | head -20
+  echo "-- aruco ids:      $(grep -oP 'aruco_\K[0-9]+' "$w" | sort -un | tr '\n' ' ')"
+  echo "-- camera sensors: $(grep -c 'sensor .*type="camera"' "$w")"
+  echo "-- camera names:   $(grep -oP '&lt;sensor name="\K[^"]+' "$w" | tr '\n' ' ')"
+  echo "-- textured:       $(grep -ci 'albedo_map\|&lt;texture\|\.png\|\.jpg' "$w")"
+  echo "-- static bins:    $(grep -A6 '_bin"' "$w" | grep -c '&lt;static&gt;true')"
+done</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">2.4 La règle de décision</h3>
 <p class="prose">Le monde cible est celui qui satisfait <b>les quatre</b> critères :</p>
 <div class="table-wrap"><table><thead><tr><th>#</th><th>Critère</th><th>Pourquoi c’est important</th></tr></thead><tbody><tr><td>1</td><td>Déclare les huit modèles de A2</td><td>Sans quatre objets, il n’y a pas de tâche de sélection</td></tr><tr><td>2</td><td>Contient les marqueurs ArUco 19, 23, 25, 26</td><td>Correspondance visuelle avec le banc physique</td></tr><tr><td>3</td><td>Contient un capteur caméra de table</td><td>Le flux d’observation en dépend</td></tr><tr><td>4</td><td>A une table texturée, pas un simple plan de sol</td><td>Réalisme visuel ; réduit l’écart simulation-réel</td></tr></tbody></table></div>
@@ -535,13 +557,48 @@ main a { color: var(--accent); }
 <p class="prose">La décision est prise une seule fois, par écrit, avant l’enregistrement de tout épisode. On ne peut pas y revenir plus tard sans invalider tous les épisodes déjà capturés.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">3.2 D’abord, lire le pipeline de référence</h3>
 <p class="prose">Vingt minutes, et cela peut répondre à la question sans rien exécuter.</p>
-<pre>sed -n '1,240p' $(find . -name "sim_grasp.launch.py" | head -1)# what nodes does it launch, and what do they do at grasp time?ls $(find . -type d -name "*gateway*" | head -1)/*/# THE DECISIVE GREPgrep -rniE "detachable|attach|weld|fixed_joint|SIMULATED" \     --include="*.py" --include="*.sdf" --include="*.xml" --include="*.yaml" . \  | grep -v "^./doc/" | head -40</pre>
+<pre>sed -n '1,240p' $(find . -name "sim_grasp.launch.py" | head -1)
+
+# what nodes does it launch, and what do they do at grasp time?
+ls $(find . -type d -name "*gateway*" | head -1)/*/
+
+# THE DECISIVE GREP
+grep -rniE "detachable|attach|weld|fixed_joint|SIMULATED" \
+     --include="*.py" --include="*.sdf" --include="*.xml" --include="*.yaml" . \
+  | grep -v "^./doc/" | head -40</pre>
 <p class="prose">Interprétation :</p>
 <div class="table-wrap"><table><thead><tr><th>Résultat du grep</th><th>Signification</th><th>Action</th></tr></thead><tbody><tr><td>Aucune correspondance nulle part</td><td>La saisie de référence est une vraie physique de contact</td><td>Passer à 3.3 — grande valeur</td></tr><tr><td>Correspondances seulement dans les fichiers de l’acquisition précédente</td><td>Comme ci-dessus</td><td>Passer à 3.3</td></tr><tr><td>Correspondances dans le pipeline de référence lui-même</td><td>Le pipeline de l’équipe utilise lui aussi une attache</td><td><b>Arrêter.</b> A8 est confirmée, et la décision précédente est validée a posteriori. Le consigner — c’est un constat qui mérite d’être signalé</td></tr></tbody></table></div>
 <h3 style="margin-top:26px;font-size:1.1rem">3.3 Ensuite, l’exécuter une fois, sans modification</h3>
-<pre># Terminal 1 — the reference pipeline exactly as shipped, no editsros2 launch mycobot_gateway sim_grasp.launch.py# Terminal 2 — independent pose logging; do NOT trust console outputpython3 scripts/track_grasp.py --model red_cube --out /tmp/refgrasp.csv --hz 10# Terminal 3 — is anything being welded at runtime?ros2 topic list | grep -iE "attach|detach|weld"gz topic -l | grep -iE "attach|detach"</pre>
+<pre># Terminal 1 — the reference pipeline exactly as shipped, no edits
+ros2 launch mycobot_gateway sim_grasp.launch.py
+
+# Terminal 2 — independent pose logging; do NOT trust console output
+python3 scripts/track_grasp.py --model red_cube --out /tmp/refgrasp.csv --hz 10
+
+# Terminal 3 — is anything being welded at runtime?
+ros2 topic list | grep -iE "attach|detach|weld"
+gz topic -l | grep -iE "attach|detach"</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">3.4 Lire le verdict dans le CSV, pas à l’écran</h3>
-<pre># scripts/assess_reference_grasp.pyimport csv, statistics, sysrows = list(csv.DictReader(open(sys.argv[1])))lift = [r for r in rows if r["phase"] in ("lift", "transport")]if not lift:    sys.exit("no lift/transport samples — the run did not reach the lift phase")dz   = [float(r["dz"]) for r in lift]bz   = [float(r["bz"]) for r in lift]rise = max(bz) - min(float(r["bz"]) for r in rows if r["phase"] == "grasp")print(f"samples in lift/transport : {len(dz)}")print(f"dz mean / stdev / range   : {statistics.mean(dz):.4f} / "      f"{statistics.pstdev(dz):.4f} / {max(dz)-min(dz):.4f} m")print(f"object rise               : {rise:.4f} m")held = (max(dz) - min(dz)) &lt; 0.005 and rise &gt; 0.05print("VERDICT:", "GRASP HELD" if held else "NOT HELD")sys.exit(0 if held else 1)</pre>
+<pre># scripts/assess_reference_grasp.py
+import csv, statistics, sys
+
+rows = list(csv.DictReader(open(sys.argv[1])))
+lift = [r for r in rows if r["phase"] in ("lift", "transport")]
+if not lift:
+    sys.exit("no lift/transport samples — the run did not reach the lift phase")
+
+dz   = [float(r["dz"]) for r in lift]
+bz   = [float(r["bz"]) for r in lift]
+rise = max(bz) - min(float(r["bz"]) for r in rows if r["phase"] == "grasp")
+
+print(f"samples in lift/transport : {len(dz)}")
+print(f"dz mean / stdev / range   : {statistics.mean(dz):.4f} / "
+      f"{statistics.pstdev(dz):.4f} / {max(dz)-min(dz):.4f} m")
+print(f"object rise               : {rise:.4f} m")
+
+held = (max(dz) - min(dz)) &lt; 0.005 and rise &gt; 0.05
+print("VERDICT:", "GRASP HELD" if held else "NOT HELD")
+sys.exit(0 if held else 1)</pre>
 <p class="prose">Trois questions, avec des réponses chiffrées :</p>
 <ol class="prose">
 <li>Le z de l’objet monte-t-il en même temps que celui de l’effecteur ?</li>
@@ -555,9 +612,23 @@ main a { color: var(--accent); }
 <p class="prose">Chacun des quatre objets a besoin de sa propre configuration d’attache, et chacune doit viser <b><code>link6</code></b>, jamais <code>gripper_base</code>.</p>
 <p class="prose"><b>Pourquoi, et pourquoi c’est silencieux.</b> <code>gripper_base</code> n’est qu’un repère TF/URDF. La conversion URDF vers SDF le fusionne dans le lien Gazebo <code>link6</code>, si bien qu’il n’existe pas comme nom de lien Gazebo adressable. Un <code>DetachableJoint</code> déclarant <code>child_link: gripper_base</code> <b>accepte le message d’attache et ne fait rien — aucune erreur, aucun avertissement, aucune ligne de journal.</b> Le symptôme est identique à un vrai échec de saisie par frottement : l’objet ne bouge pas. L’acquisition précédente a perdu un cycle de débogage complet exactement sur ce point. Avec quatre objets, il y a désormais quatre occasions de le répéter.</p>
 <p class="prose">Valider les quatre au moment de l’écriture, avant le lot :</p>
-<pre># link6 must be a real Gazebo linkgz model -m mycobot_320pi --link | grep -qx "link6" \  &amp;&amp; echo "OK link6 addressable" \  || echo "FATAL: link6 is not a Gazebo link name"# each object must expose the link its DetachableJoint namesfor m in red_cube blue_cube green_cylinder yellow_box; do  printf '%-16s links: ' "$m"  gz model -m "$m" --link 2&gt;/dev/null | tr '\n' ' ' || echo "NOT SPAWNED"  echodone</pre>
+<pre># link6 must be a real Gazebo link
+gz model -m mycobot_320pi --link | grep -qx "link6" \
+  &amp;&amp; echo "OK link6 addressable" \
+  || echo "FATAL: link6 is not a Gazebo link name"
+
+# each object must expose the link its DetachableJoint names
+for m in red_cube blue_cube green_cylinder yellow_box; do
+  printf '%-16s links: ' "$m"
+  gz model -m "$m" --link 2&gt;/dev/null | tr '\n' ' ' || echo "NOT SPAWNED"
+  echo
+done</pre>
 <p class="prose">Et prouver que chaque attache s’attache réellement, au lieu de le supposer :</p>
-<pre># per object: attach, command a 5 cm lift, verify the object followedfor m in red_cube blue_cube green_cylinder yellow_box; do  python3 scripts/attach_smoke_test.py --model "$m" --lift 0.05 \    &amp;&amp; echo "$m ATTACH OK" || echo "$m ATTACH FAILED"done</pre>
+<pre># per object: attach, command a 5 cm lift, verify the object followed
+for m in red_cube blue_cube green_cylinder yellow_box; do
+  python3 scripts/attach_smoke_test.py --model "$m" --lift 0.05 \
+    &amp;&amp; echo "$m ATTACH OK" || echo "$m ATTACH FAILED"
+done</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">3.7 Consigner la décision</h3>
 <p class="prose">Écrire <code>doc/GRASP_DECISION.md</code> : le verdict, les preuves du CSV, la sortie du grep de 3.2, et un paragraphe expliquant pourquoi. Si la saisie physique a été adoptée, dire explicitement pourquoi elle a réussi ici et pas lors de l’acquisition précédente — cette comparaison est en soi un constat à signaler.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">✅ Critère d’achèvement de la partie 3</h3>
@@ -572,26 +643,147 @@ main a { color: var(--accent); }
 <p class="prose"><b>Les deux cubes sont présumés de forme identique.</b> Le vérifier plutôt que le présumer — une longueur d’arête différente change la hauteur de saisie.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">4.2 Extraire les vrais chiffres</h3>
 <p class="prose">Ne jamais inventer une dimension. Les lire toutes dans les SDF fusionnés.</p>
-<pre>python3 - &lt;&lt;'PY'import glob, re, osNAMES = ("red_cube|blue_cube|green_cylinder|yellow_box|"         "red_bin|blue_bin|green_bin|yellow_bin")pat = re.compile(rf'&lt;model name="({NAMES})"(.*?)&lt;/model&gt;', re.S)print(f"{'model':16s} {'file':30s} {'box size':22s} {'cyl r,l':16s} "      f"{'mass':8s} {'mu':6s} {'static':7s} pose")for f in glob.glob('**/*.sdf', recursive=True):    try:        s = open(f, errors='replace').read()    except OSError:        continue    for name, body in pat.findall(s):        box  = re.search(r'&lt;box&gt;\s*&lt;size&gt;([^&lt;]+)&lt;/size&gt;', body)        cyl  = re.search(r'&lt;cylinder&gt;\s*&lt;radius&gt;([^&lt;]+)&lt;/radius&gt;\s*'                         r'&lt;length&gt;([^&lt;]+)&lt;/length&gt;', body)        mass = re.search(r'&lt;mass&gt;([^&lt;]+)&lt;/mass&gt;', body)        mu   = re.search(r'&lt;mu&gt;([^&lt;]+)&lt;/mu&gt;', body)        stat = re.search(r'&lt;static&gt;([^&lt;]+)&lt;/static&gt;', body)        pose = re.search(r'&lt;pose&gt;([^&lt;]+)&lt;/pose&gt;', body)        g = lambda m, i=1: m.group(i).strip() if m else '-'        print(f"{name:16s} {os.path.basename(f):30s} {g(box):22s} "              f"{(g(cyl)+','+g(cyl,2)) if cyl else '-':16s} "              f"{g(mass):8s} {g(mu):6s} {g(stat):7s} {g(pose)}")PY</pre>
+<pre>python3 - &lt;&lt;'PY'
+import glob, re, os
+NAMES = ("red_cube|blue_cube|green_cylinder|yellow_box|"
+         "red_bin|blue_bin|green_bin|yellow_bin")
+pat = re.compile(rf'&lt;model name="({NAMES})"(.*?)&lt;/model&gt;', re.S)
+print(f"{'model':16s} {'file':30s} {'box size':22s} {'cyl r,l':16s} "
+      f"{'mass':8s} {'mu':6s} {'static':7s} pose")
+for f in glob.glob('**/*.sdf', recursive=True):
+    try:
+        s = open(f, errors='replace').read()
+    except OSError:
+        continue
+    for name, body in pat.findall(s):
+        box  = re.search(r'&lt;box&gt;\s*&lt;size&gt;([^&lt;]+)&lt;/size&gt;', body)
+        cyl  = re.search(r'&lt;cylinder&gt;\s*&lt;radius&gt;([^&lt;]+)&lt;/radius&gt;\s*'
+                         r'&lt;length&gt;([^&lt;]+)&lt;/length&gt;', body)
+        mass = re.search(r'&lt;mass&gt;([^&lt;]+)&lt;/mass&gt;', body)
+        mu   = re.search(r'&lt;mu&gt;([^&lt;]+)&lt;/mu&gt;', body)
+        stat = re.search(r'&lt;static&gt;([^&lt;]+)&lt;/static&gt;', body)
+        pose = re.search(r'&lt;pose&gt;([^&lt;]+)&lt;/pose&gt;', body)
+        g = lambda m, i=1: m.group(i).strip() if m else '-'
+        print(f"{name:16s} {os.path.basename(f):30s} {g(box):22s} "
+              f"{(g(cyl)+','+g(cyl,2)) if cyl else '-':16s} "
+              f"{g(mass):8s} {g(mu):6s} {g(stat):7s} {g(pose)}")
+PY</pre>
 <p class="prose">Extraire aussi la hauteur du plateau de la table, dont dépend chaque z de saisie :</p>
-<pre>grep -B4 -A20 '&lt;model name="table"' $(cat config/WORLD_PATH) \  | grep -E '&lt;pose&gt;|&lt;size&gt;|&lt;box&gt;'</pre>
+<pre>grep -B4 -A20 '&lt;model name="table"' $(cat config/WORLD_PATH) \
+  | grep -E '&lt;pose&gt;|&lt;size&gt;|&lt;box&gt;'</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">4.3 Déterminer la hauteur du rebord des bacs</h3>
 <p class="prose">Un bac est un contenant, pas une plaque. Trois grandeurs géométriques sont nécessaires par bac :</p>
 <div class="table-wrap"><table><thead><tr><th>Grandeur</th><th>Signification</th><th>Utilisée par</th></tr></thead><tbody><tr><td><code>pose</code></td><td>Centre du bac dans le repère monde</td><td>Point de passage de transport</td></tr><tr><td><code>inner_radius</code></td><td>Plus grand rayon qu’un objet peut occuper sans toucher une paroi</td><td>Contrôle de dépose (partie 9.2)</td></tr><tr><td><code>rim_z</code></td><td>Hauteur du bord supérieur dans le repère monde</td><td>Hauteur de lâcher, et contrôle « ne repose pas sur le rebord »</td></tr></tbody></table></div>
 <p class="prose">Si le bac est modélisé comme un assemblage de parois et d’un fond plutôt que comme une primitive unique, <code>inner_radius</code> et <code>rim_z</code> doivent être déduits de la géométrie des parois. Les mesurer directement si le SDF est difficile à analyser :</p>
-<pre>ros2 run ros_gz_sim create -world &lt;world&gt; -file &lt;bin&gt;.sdf -name probe_bin \  -x 0.30 -y 0.0 -z 0.10sleep 15gz model -m probe_bin -p        # settled posegz model -m probe_bin --link    # link names, to inspect wall geometry</pre>
+<pre>ros2 run ros_gz_sim create -world &lt;world&gt; -file &lt;bin&gt;.sdf -name probe_bin \
+  -x 0.30 -y 0.0 -z 0.10
+sleep 15
+gz model -m probe_bin -p        # settled pose
+gz model -m probe_bin --link    # link names, to inspect wall geometry</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">4.4 Confirmer que les bacs sont statiques</h3>
-<pre>for b in red_bin blue_bin green_bin yellow_bin; do  printf '%-12s ' "$b"  grep -A8 "name=\"$b\"" $(cat config/WORLD_PATH) | grep -q '&lt;static&gt;true' \    &amp;&amp; echo "static OK" || echo "DYNAMIC — destination can move mid-episode"done</pre>
+<pre>for b in red_bin blue_bin green_bin yellow_bin; do
+  printf '%-12s ' "$b"
+  grep -A8 "name=\"$b\"" $(cat config/WORLD_PATH) | grep -q '&lt;static&gt;true' \
+    &amp;&amp; echo "static OK" || echo "DYNAMIC — destination can move mid-episode"
+done</pre>
 <p class="prose">Un bac non statique peut être déplacé par une approche maladroite, après quoi chaque contrôle de dépose est mesuré par rapport à une cible qui a bougé. Si un bac est dynamique, soit le rendre statique pour l’acquisition — par une surcharge locale du monde, documentée —, soit enregistrer les poses des bacs au début de l’épisode et évaluer la dépose par rapport à elles plutôt qu’aux valeurs configurées.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">4.5 Le manifeste</h3>
 <p class="prose">Créer <code>config/objects.yaml</code>. <b>C’est la source unique de vérité.</b> Rien en aval ne code en dur une dimension, une pose ou une instruction.</p>
-<pre># config/objects.yaml# Every numeric field READ FROM THE MERGED SDFs (Part 4.2). Placeholders below# are shaped correctly but must be replaced. Do not ship this file unedited.world_path_file: config/WORLD_PATHtable_top_z:     0.000        # &lt;-- READ: world frame z of the table surfaceobjects:  red_cube:    shape:       box    size:        [0.040, 0.040, 0.040]   # &lt;-- READ    mass:        0.050                   # &lt;-- READ    mu:          1.500                   # &lt;-- READ    grasp_dz:    0.010      # above object CENTRE; see Part 4.6    grasp_yaw:   0.0        # rotationally symmetric top-down    bin:         red_bin    instruction: "pick up the red cube and place it in the red bin"  blue_cube:    shape:       box    size:        [0.040, 0.040, 0.040]   # &lt;-- READ; verify it matches red_cube    mass:        0.050    mu:          1.500    grasp_dz:    0.010    grasp_yaw:   0.0    bin:         blue_bin    instruction: "pick up the blue cube and place it in the blue bin"  green_cylinder:    shape:       cylinder    radius:      0.020                   # &lt;-- READ    length:      0.050                   # &lt;-- READ    mass:        0.050    mu:          1.500    grasp_dz:    0.012      # above mid-height, below the top edge    grasp_yaw:   0.0        # symmetric about its own axis    bin:         green_bin    instruction: "pick up the green cylinder and place it in the green bin"  yellow_box:    shape:       box    size:        [0.060, 0.035, 0.035]   # &lt;-- READ; note the asymmetry    mass:        0.050    mu:          1.500    grasp_dz:    0.008    grasp_yaw:   1.5708     # 90 deg — close across the SHORT axis    bin:         yellow_bin    instruction: "pick up the yellow box and place it in the yellow bin"bins:  red_bin:    pose:         [0.000, 0.000, 0.000]  # &lt;-- READ    inner_radius: 0.000                  # &lt;-- READ or measure (Part 4.3)    rim_z:        0.000                  # &lt;-- READ or measure    static:       true                   # &lt;-- CONFIRM (Part 4.4)  blue_bin:   {pose: [0,0,0], inner_radius: 0.0, rim_z: 0.0, static: true}  green_bin:  {pose: [0,0,0], inner_radius: 0.0, rim_z: 0.0, static: true}  yellow_bin: {pose: [0,0,0], inner_radius: 0.0, rim_z: 0.0, static: true}release:  height_above_bin_rim: 0.030    # see Part 8.3 for why 3 cm and not 0spawn:  settle_seconds_sim: 3.0        # SIMULATION seconds, not wall clock  min_object_separation: 0.080   # centre-to-centre  bin_keepout_radius:   0.090    # object centre to bin centre</pre>
+<pre># config/objects.yaml
+# Every numeric field READ FROM THE MERGED SDFs (Part 4.2). Placeholders below
+# are shaped correctly but must be replaced. Do not ship this file unedited.
+
+world_path_file: config/WORLD_PATH
+table_top_z:     0.000        # &lt;-- READ: world frame z of the table surface
+
+objects:
+  red_cube:
+    shape:       box
+    size:        [0.040, 0.040, 0.040]   # &lt;-- READ
+    mass:        0.050                   # &lt;-- READ
+    mu:          1.500                   # &lt;-- READ
+    grasp_dz:    0.010      # above object CENTRE; see Part 4.6
+    grasp_yaw:   0.0        # rotationally symmetric top-down
+    bin:         red_bin
+    instruction: "pick up the red cube and place it in the red bin"
+
+  blue_cube:
+    shape:       box
+    size:        [0.040, 0.040, 0.040]   # &lt;-- READ; verify it matches red_cube
+    mass:        0.050
+    mu:          1.500
+    grasp_dz:    0.010
+    grasp_yaw:   0.0
+    bin:         blue_bin
+    instruction: "pick up the blue cube and place it in the blue bin"
+
+  green_cylinder:
+    shape:       cylinder
+    radius:      0.020                   # &lt;-- READ
+    length:      0.050                   # &lt;-- READ
+    mass:        0.050
+    mu:          1.500
+    grasp_dz:    0.012      # above mid-height, below the top edge
+    grasp_yaw:   0.0        # symmetric about its own axis
+    bin:         green_bin
+    instruction: "pick up the green cylinder and place it in the green bin"
+
+  yellow_box:
+    shape:       box
+    size:        [0.060, 0.035, 0.035]   # &lt;-- READ; note the asymmetry
+    mass:        0.050
+    mu:          1.500
+    grasp_dz:    0.008
+    grasp_yaw:   1.5708     # 90 deg — close across the SHORT axis
+    bin:         yellow_bin
+    instruction: "pick up the yellow box and place it in the yellow bin"
+
+bins:
+  red_bin:
+    pose:         [0.000, 0.000, 0.000]  # &lt;-- READ
+    inner_radius: 0.000                  # &lt;-- READ or measure (Part 4.3)
+    rim_z:        0.000                  # &lt;-- READ or measure
+    static:       true                   # &lt;-- CONFIRM (Part 4.4)
+  blue_bin:   {pose: [0,0,0], inner_radius: 0.0, rim_z: 0.0, static: true}
+  green_bin:  {pose: [0,0,0], inner_radius: 0.0, rim_z: 0.0, static: true}
+  yellow_bin: {pose: [0,0,0], inner_radius: 0.0, rim_z: 0.0, static: true}
+
+release:
+  height_above_bin_rim: 0.030    # see Part 8.3 for why 3 cm and not 0
+
+spawn:
+  settle_seconds_sim: 3.0        # SIMULATION seconds, not wall clock
+  min_object_separation: 0.080   # centre-to-centre
+  bin_keepout_radius:   0.090    # object centre to bin centre</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">4.6 Pourquoi la hauteur de saisie est mesurée depuis le centre de l’objet</h3>
 <p class="prose">Pour un cube d’arête <code>a</code> dont le <i>centre</i> est à la hauteur <code>z</code>, la face supérieure est à <code>z + a/2</code>. Viser <code>z</code> avec le bout des doigts les enfoncerait dans l’objet. Viser <code>z + grasp_dz</code> avec <code>grasp_dz</code> un peu inférieur à <code>a/2</code> place les patins des doigts autour de la partie haute de l’objet.</p>
 <p class="prose">Pour le cylindre, <code>grasp_dz</code> doit être inférieur à <code>length/2</code> pour que les patins touchent la paroi courbe au lieu de se fermer au-dessus de la face supérieure — un mode d’échec observé directement lors de l’acquisition précédente, où une hauteur de saisie de 0,12 m laissait l’objet parfaitement intact.</p>
 <p class="prose">C’est le chiffre le plus susceptible de devoir être ajusté, et le moins coûteux à changer. C’est précisément pour cela qu’il est dans <code>objects.yaml</code>.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">4.7 Valider le manifeste avant de continuer</h3>
-<pre># scripts/validate_objects.pyimport yaml, sysc = yaml.safe_load(open("config/objects.yaml"))errs = []for name, o in c["objects"].items():    if o["bin"] not in c["bins"]:        errs.append(f"{name}: bin {o['bin']} not declared")    if o["shape"] == "box" and (not o.get("size") or any(v &lt;= 0 for v in o["size"])):        errs.append(f"{name}: invalid or placeholder size")    if o["shape"] == "cylinder" and not (o.get("radius", 0) &gt; 0 and o.get("length", 0) &gt; 0):        errs.append(f"{name}: invalid or placeholder cylinder dims")    half = (o["size"][2] / 2) if o["shape"] == "box" else (o["length"] / 2)    if o["grasp_dz"] &gt;= half:        errs.append(f"{name}: grasp_dz {o['grasp_dz']} &gt;= half-height {half} "                    f"— fingers will close above the object")    if not o["instruction"].strip():        errs.append(f"{name}: empty instruction")for bn, b in c["bins"].items():    if b["inner_radius"] &lt;= 0 or b["rim_z"] == 0:        errs.append(f"{bn}: placeholder geometry not replaced")    if not b.get("static", False):        errs.append(f"{bn}: NOT static — see Part 4.4")print("\n".join(errs) if errs else "objects.yaml OK")sys.exit(1 if errs else 0)</pre>
+<pre># scripts/validate_objects.py
+import yaml, sys
+c = yaml.safe_load(open("config/objects.yaml"))
+errs = []
+for name, o in c["objects"].items():
+    if o["bin"] not in c["bins"]:
+        errs.append(f"{name}: bin {o['bin']} not declared")
+    if o["shape"] == "box" and (not o.get("size") or any(v &lt;= 0 for v in o["size"])):
+        errs.append(f"{name}: invalid or placeholder size")
+    if o["shape"] == "cylinder" and not (o.get("radius", 0) &gt; 0 and o.get("length", 0) &gt; 0):
+        errs.append(f"{name}: invalid or placeholder cylinder dims")
+    half = (o["size"][2] / 2) if o["shape"] == "box" else (o["length"] / 2)
+    if o["grasp_dz"] &gt;= half:
+        errs.append(f"{name}: grasp_dz {o['grasp_dz']} &gt;= half-height {half} "
+                    f"— fingers will close above the object")
+    if not o["instruction"].strip():
+        errs.append(f"{name}: empty instruction")
+for bn, b in c["bins"].items():
+    if b["inner_radius"] &lt;= 0 or b["rim_z"] == 0:
+        errs.append(f"{bn}: placeholder geometry not replaced")
+    if not b.get("static", False):
+        errs.append(f"{bn}: NOT static — see Part 4.4")
+print("\n".join(errs) if errs else "objects.yaml OK")
+sys.exit(1 if errs else 0)</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">✅ Critère d’achèvement de la partie 4</h3>
 <p class="prose"><code>config/objects.yaml</code> complet, chaque champ lu dans les SDF, <code>validate_objects.py</code> qui se termine avec 0, le caractère statique des bacs confirmé, les orientations de saisie du cylindre et du pavé décidées.</p>
 </section>
@@ -610,9 +802,20 @@ main a { color: var(--accent); }
 <p class="prose">Utiliser des instructions qui correspondent une à une à ces classes. Ne pas introduire de synonymes — ni « the red block », ni « the crimson cube », ni « the red container ». <b>Une seule formulation par objet, identique à l’octet près dans ses quinze épisodes.</b></p>
 <p class="prose">La robustesse aux paraphrases est une expérience ultérieure délibérée, avec son propre plan de réserve. Introduire de la variation maintenant, par accident, rend impossible de mener proprement cette expérience plus tard.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">5.4 La table des tâches</h3>
-<pre>{"task_index": 0, "task": "pick up the red cube and place it in the red bin"}{"task_index": 1, "task": "pick up the blue cube and place it in the blue bin"}{"task_index": 2, "task": "pick up the green cylinder and place it in the green bin"}{"task_index": 3, "task": "pick up the yellow box and place it in the yellow bin"}</pre>
+<pre>{"task_index": 0, "task": "pick up the red cube and place it in the red bin"}
+{"task_index": 1, "task": "pick up the blue cube and place it in the blue bin"}
+{"task_index": 2, "task": "pick up the green cylinder and place it in the green bin"}
+{"task_index": 3, "task": "pick up the yellow box and place it in the yellow bin"}</pre>
 <p class="prose">Générer ce fichier à partir de <code>objects.yaml</code> plutôt que de le taper, pour que les deux ne puissent pas diverger :</p>
-<pre># scripts/make_tasks.pyimport yaml, jsonc = yaml.safe_load(open("config/objects.yaml"))order = ["red_cube", "blue_cube", "green_cylinder", "yellow_box"]with open("config/tasks.jsonl", "w") as f:    for i, name in enumerate(order):        f.write(json.dumps({"task_index": i,                            "task": c["objects"][name]["instruction"]}) + "\n")print("wrote config/tasks.jsonl")</pre>
+<pre># scripts/make_tasks.py
+import yaml, json
+c = yaml.safe_load(open("config/objects.yaml"))
+order = ["red_cube", "blue_cube", "green_cylinder", "yellow_box"]
+with open("config/tasks.jsonl", "w") as f:
+    for i, name in enumerate(order):
+        f.write(json.dumps({"task_index": i,
+                            "task": c["objects"][name]["instruction"]}) + "\n")
+print("wrote config/tasks.jsonl")</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">5.5 L’affectation se fait par couleur</h3>
 <p class="prose">Selon A6. Chaque objet va dans le bac de sa propre couleur. Pas de logique de taille, pas de destinations marquées par ArUco, pas d’exception.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">✅ Critère d’achèvement de la partie 5</h3>
@@ -630,7 +833,12 @@ main a { color: var(--accent); }
 <p class="prose">L’évaluation du détecteur d’objets de l’équipe suit le même principe — détection complète sur la caméra d’entraînement, détection dégradée sur une caméra jamais vue pendant l’entraînement, rapportée honnêtement comme un instantané plutôt que comme un taux mesuré. Cette répartition avec réserve est la pratique établie, pas une importation.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">6.4 La seconde caméra doit réellement exister</h3>
 <p class="prose">Une caméra réservée qui n’existe pas est un jeu réservé qui n’existe pas. Avant de générer la matrice :</p>
-<pre># cameras declared in the target worldgrep -oP '&lt;sensor name="\K[^"]+' $(cat config/WORLD_PATH)grep -oP '&lt;topic&gt;\K[^&lt;]+' $(cat config/WORLD_PATH) | grep -i cam# and at runtime, with the world loadedros2 topic list | grep -iE "image|camera"</pre>
+<pre># cameras declared in the target world
+grep -oP '&lt;sensor name="\K[^"]+' $(cat config/WORLD_PATH)
+grep -oP '&lt;topic&gt;\K[^&lt;]+' $(cat config/WORLD_PATH) | grep -i cam
+
+# and at runtime, with the world loaded
+ros2 topic list | grep -iE "image|camera"</pre>
 <p class="prose">S’il n’existe qu’une caméra, soumettre la question à l’équipe robotique avec trois options, par ordre de préférence :</p>
 <ol class="prose">
 <li>Ajouter une seconde caméra dans une surcharge locale du monde, à une autre pose — le moins coûteux, et le plus proche de l’intention</li>
@@ -640,8 +848,22 @@ main a { color: var(--accent); }
 <h3 style="margin-top:26px;font-size:1.1rem">6.5 Remesurer l’enveloppe accessible</h3>
 <p class="prose">L’acquisition précédente a établi que l’IK par le dessus sur la branche coude haut n’avait <b>aucune solution sous x ≈ 0,245 m</b>, ce qui a fait passer la plage en x d’un 0,22–0,28 prévu à un 0,25–0,31 effectif.</p>
 <p class="prose"><b>Cette limite appartient à la géométrie de table du monde précédent.</b> Ce monde a une vraie table mesurée, peut-être à une autre hauteur. La redéduire plutôt que d’en hériter :</p>
-<pre>python3 scripts/precompute_ik.py --sweep \  --x-range 0.18 0.36 --x-step 0.005 \  --y-range -0.14 0.14 --y-step 0.01 \  --z-from-config config/objects.yaml \  --require-elbow-up \  --out config/reach_map.csv
-# scripts/summarise_reach.py — the usable rectangleimport csvok = [(float(r["x"]), float(r["y"])) for r in csv.DictReader(open("config/reach_map.csv"))      if r["solved"] == "1" and r["elbow_up"] == "1"]xs, ys = [p[0] for p in ok], [p[1] for p in ok]print(f"solved points: {len(ok)}")print(f"x range: {min(xs):.3f} .. {max(xs):.3f}")print(f"y range: {min(ys):.3f} .. {max(ys):.3f}")print(f"SAFE (5 mm margin): x {min(xs)+0.005:.3f} .. {max(xs)-0.005:.3f}, "      f"y {min(ys)+0.005:.3f} .. {max(ys)-0.005:.3f}")</pre>
+<pre>python3 scripts/precompute_ik.py --sweep \
+  --x-range 0.18 0.36 --x-step 0.005 \
+  --y-range -0.14 0.14 --y-step 0.01 \
+  --z-from-config config/objects.yaml \
+  --require-elbow-up \
+  --out config/reach_map.csv
+# scripts/summarise_reach.py — the usable rectangle
+import csv
+ok = [(float(r["x"]), float(r["y"])) for r in csv.DictReader(open("config/reach_map.csv"))
+      if r["solved"] == "1" and r["elbow_up"] == "1"]
+xs, ys = [p[0] for p in ok], [p[1] for p in ok]
+print(f"solved points: {len(ok)}")
+print(f"x range: {min(xs):.3f} .. {max(xs):.3f}")
+print(f"y range: {min(ys):.3f} .. {max(ys):.3f}")
+print(f"SAFE (5 mm margin): x {min(xs)+0.005:.3f} .. {max(xs)-0.005:.3f}, "
+      f"y {min(ys)+0.005:.3f} .. {max(ys)-0.005:.3f}")</pre>
 <p class="prose"><b>Utiliser le rectangle avec marge, jamais la limite brute.</b> Une position qui se résout tout juste au bord échouera par intermittence une fois l’objet stabilisé à quelques millimètres de sa pose d’apparition — et un échec d’IK intermittent en plein lot coûte cher.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">6.6 Les positions ne doivent pas entrer en collision</h3>
 <p class="prose">Quatre objets et quatre bacs partagent une table. Deux contraintes que l’acquisition précédente n’a jamais rencontrées :</p>
@@ -649,12 +871,92 @@ main a { color: var(--accent); }
 <li>Deux objets qui se chevauchent à l’apparition amènent le moteur physique à en éjecter un violemment</li>
 <li>Un objet apparu dans l’emprise d’un bac commence l’épisode dans son propre état but</li>
 </ol>
-<pre># scripts/layout.pyimport math, randomdef validate_layout(obj_xy, bin_xy, min_sep, bin_keepout):    """Return (ok, reason). obj_xy/bin_xy are {name: (x, y)}."""    names = list(obj_xy)    for i, a in enumerate(names):        for b in names[i+1:]:            d = math.dist(obj_xy[a], obj_xy[b])            if d &lt; min_sep:                return False, f"{a}/{b} separated by {d:.3f} m &lt; {min_sep}"    for o, p in obj_xy.items():        for bn, q in bin_xy.items():            d = math.dist(p, q)            if d &lt; bin_keepout:                return False, f"{o} is {d:.3f} m from {bn} (keepout {bin_keepout})"    return True, "ok"def sample_distractors(target, target_xy, bin_xy, safe_rect,                       min_sep, bin_keepout, others, rng, tries=500):    """Place the three non-target objects at valid random positions."""    x0, x1, y0, y1 = safe_rect    for _ in range(tries):        layout = {target: target_xy}        for name in others:            layout[name] = (round(rng.uniform(x0, x1), 4),                            round(rng.uniform(y0, y1), 4))        ok, _ = validate_layout(layout, bin_xy, min_sep, bin_keepout)        if ok:            return layout    raise RuntimeError("could not find a valid layout — relax the rectangle "                       "or reduce min_sep")</pre>
+<pre># scripts/layout.py
+import math, random
+
+def validate_layout(obj_xy, bin_xy, min_sep, bin_keepout):
+    """Return (ok, reason). obj_xy/bin_xy are {name: (x, y)}."""
+    names = list(obj_xy)
+    for i, a in enumerate(names):
+        for b in names[i+1:]:
+            d = math.dist(obj_xy[a], obj_xy[b])
+            if d &lt; min_sep:
+                return False, f"{a}/{b} separated by {d:.3f} m &lt; {min_sep}"
+    for o, p in obj_xy.items():
+        for bn, q in bin_xy.items():
+            d = math.dist(p, q)
+            if d &lt; bin_keepout:
+                return False, f"{o} is {d:.3f} m from {bn} (keepout {bin_keepout})"
+    return True, "ok"
+
+def sample_distractors(target, target_xy, bin_xy, safe_rect,
+                       min_sep, bin_keepout, others, rng, tries=500):
+    """Place the three non-target objects at valid random positions."""
+    x0, x1, y0, y1 = safe_rect
+    for _ in range(tries):
+        layout = {target: target_xy}
+        for name in others:
+            layout[name] = (round(rng.uniform(x0, x1), 4),
+                            round(rng.uniform(y0, y1), 4))
+        ok, _ = validate_layout(layout, bin_xy, min_sep, bin_keepout)
+        if ok:
+            return layout
+    raise RuntimeError("could not find a valid layout — relax the rectangle "
+                       "or reduce min_sep")</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">6.7 Générer la matrice</h3>
-<pre># scripts/make_matrix.py  -&gt;  config/episode_matrix.csvimport csv, yaml, randomfrom layout import sample_distractorsrandom.seed(20260923)          # reproducibility is not optionalrng = random.Random(20260923)cfg  = yaml.safe_load(open("config/objects.yaml"))OBJ  = ["red_cube", "blue_cube", "green_cylinder", "yellow_box"]bins = {k: (v["pose"][0], v["pose"][1]) for k, v in cfg["bins"].items()}# from Part 6.5's margined rectangle — REPLACE with measured valuesSAFE = (0.250, 0.310, -0.080, 0.080)X_NOM, Y_NOM = 0.270, 0.000X_VAR = [0.250, 0.265, 0.285, 0.305]Y_VAR = [-0.070, -0.035, 0.035, 0.070]rows, idx = [], 1for obj in OBJ:    others = [o for o in OBJ if o != obj]    plan = ([("nominal",  X_NOM, Y_NOM)] * 4          + [("x_var",    x,     Y_NOM) for x in X_VAR]          + [("y_var",    X_NOM, y)     for y in Y_VAR]          + [("heldout",  X_NOM, Y_NOM),             ("heldout",  X_VAR[1], Y_NOM),             ("heldout",  X_NOM, Y_VAR[2])])    for kind, x, y in plan:        layout = sample_distractors(            obj, (x, y), bins, SAFE,            cfg["spawn"]["min_object_separation"],            cfg["spawn"]["bin_keepout_radius"], others, rng)        row = {"episode": idx, "target": obj, "kind": kind,               "target_x": x, "target_y": y,               "camera": "heldout" if kind == "heldout" else "table",               "split":  "heldout" if kind == "heldout" else "train",               "task_index": OBJ.index(obj)}        for name, (px, py) in layout.items():            row[f"{name}_x"], row[f"{name}_y"] = px, py        rows.append(row); idx += 1with open("config/episode_matrix.csv", "w", newline="") as f:    w = csv.DictWriter(f, fieldnames=list(rows[0]))    w.writeheader(); w.writerows(rows)print(f"{len(rows)} episodes  "      f"train={sum(r['split']=='train' for r in rows)}  "      f"heldout={sum(r['split']=='heldout' for r in rows)}")for o in OBJ:    print(f"  {o:16s} {sum(r['target']==o for r in rows)}")</pre>
+<pre># scripts/make_matrix.py  -&gt;  config/episode_matrix.csv
+import csv, yaml, random
+from layout import sample_distractors
+
+random.seed(20260923)          # reproducibility is not optional
+rng = random.Random(20260923)
+
+cfg  = yaml.safe_load(open("config/objects.yaml"))
+OBJ  = ["red_cube", "blue_cube", "green_cylinder", "yellow_box"]
+bins = {k: (v["pose"][0], v["pose"][1]) for k, v in cfg["bins"].items()}
+
+# from Part 6.5's margined rectangle — REPLACE with measured values
+SAFE = (0.250, 0.310, -0.080, 0.080)
+X_NOM, Y_NOM = 0.270, 0.000
+X_VAR = [0.250, 0.265, 0.285, 0.305]
+Y_VAR = [-0.070, -0.035, 0.035, 0.070]
+
+rows, idx = [], 1
+for obj in OBJ:
+    others = [o for o in OBJ if o != obj]
+    plan = ([("nominal",  X_NOM, Y_NOM)] * 4
+          + [("x_var",    x,     Y_NOM) for x in X_VAR]
+          + [("y_var",    X_NOM, y)     for y in Y_VAR]
+          + [("heldout",  X_NOM, Y_NOM),
+             ("heldout",  X_VAR[1], Y_NOM),
+             ("heldout",  X_NOM, Y_VAR[2])])
+    for kind, x, y in plan:
+        layout = sample_distractors(
+            obj, (x, y), bins, SAFE,
+            cfg["spawn"]["min_object_separation"],
+            cfg["spawn"]["bin_keepout_radius"], others, rng)
+        row = {"episode": idx, "target": obj, "kind": kind,
+               "target_x": x, "target_y": y,
+               "camera": "heldout" if kind == "heldout" else "table",
+               "split":  "heldout" if kind == "heldout" else "train",
+               "task_index": OBJ.index(obj)}
+        for name, (px, py) in layout.items():
+            row[f"{name}_x"], row[f"{name}_y"] = px, py
+        rows.append(row); idx += 1
+
+with open("config/episode_matrix.csv", "w", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=list(rows[0]))
+    w.writeheader(); w.writerows(rows)
+
+print(f"{len(rows)} episodes  "
+      f"train={sum(r['split']=='train' for r in rows)}  "
+      f"heldout={sum(r['split']=='heldout' for r in rows)}")
+for o in OBJ:
+    print(f"  {o:16s} {sum(r['target']==o for r in rows)}")</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">6.8 Chercher d’abord un randomiseur existant</h3>
 <p class="prose">L’outillage de simulation de l’équipe comprend une boîte de dialogue proposant <i>« Randomiser cube + bac »</i> — de nouvelles positions dans la zone accessible du bras — et une action <i>« Lancer la prise »</i>. Si ce code existe en local, il encode déjà la connaissance de l’équipe sur la zone accessible.</p>
-<pre>grep -rniE "randomis|randomiz|lancer.la.prise|zone accessible" \     --include="*.py" . | head</pre>
+<pre>grep -rniE "randomis|randomiz|lancer.la.prise|zone accessible" \
+     --include="*.py" . | head</pre>
 <p class="prose">S’il produit des poses accessibles et sans collision, <b>l’utiliser à la place du §6.6</b>. Reprendre l’échantillonnage de l’équipe garde la distribution de ce jeu de données cohérente avec la sienne, ce qui compte si les deux sont un jour combinés.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">✅ Critère d’achèvement de la partie 6</h3>
 <p class="prose"><code>config/episode_matrix.csv</code> de 60 lignes, répartition 48/12, 15 par objet, chaque cible dans le rectangle avec marge remesuré, chaque disposition passant <code>validate_layout</code>, et la seconde caméra confirmée.</p>
@@ -674,16 +976,65 @@ main a { color: var(--accent); }
 </ul>
 <p class="prose">La cible cartésienne d’une saisie n’est donc pas le centre de l’objet. C’est le centre de l’objet décalé du vecteur des bouts de doigts, exprimé dans <code>gripper_base</code>.</p>
 <p class="prose"><b>Remesurer dans ce monde plutôt que recopier</b>, car la fixation de la pince peut différer :</p>
-<pre># Move the arm to a known pose, WAIT for it to settle, then readpython3 scripts/goto_home.pysleep 60        # at RTF ~0.1, 60 s wall clock is ~6 s of simulation timeros2 run tf2_ros tf2_echo gripper_base gripper_left_finger_tipros2 run tf2_ros tf2_echo gripper_base gripper_right_finger_tipros2 run tf2_ros tf2_echo base_link gripper_base</pre>
+<pre># Move the arm to a known pose, WAIT for it to settle, then read
+python3 scripts/goto_home.py
+sleep 60        # at RTF ~0.1, 60 s wall clock is ~6 s of simulation time
+ros2 run tf2_ros tf2_echo gripper_base gripper_left_finger_tip
+ros2 run tf2_ros tf2_echo gripper_base gripper_right_finger_tip
+ros2 run tf2_ros tf2_echo base_link gripper_base</pre>
 <p class="prose"><b>Ne lire ces valeurs qu’après la stabilisation du bras.</b> À un facteur temps réel proche de 0,08, une transformation lue pendant que le bras bouge encore n’a aucun sens. L’acquisition précédente a commis exactement cette erreur, en a tiré une conclusion fausse, puis a passé des essais à la poursuivre.</p>
-<pre># config/gripper_frame.yaml — measured in THIS world, not inheritedgripper_base_to_fingertip:  dz: -0.100      # fingertips below gripper_base   &lt;-- MEASURE  dx:  0.036      # meeting point ahead of base     &lt;-- MEASURE  asymmetric: truemeasured_at: "2026-09-__"measured_after_settle_seconds: 60</pre>
+<pre># config/gripper_frame.yaml — measured in THIS world, not inherited
+gripper_base_to_fingertip:
+  dz: -0.100      # fingertips below gripper_base   &lt;-- MEASURE
+  dx:  0.036      # meeting point ahead of base     &lt;-- MEASURE
+  asymmetric: true
+measured_at: "2026-09-__"
+measured_after_settle_seconds: 60</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">7.3 Les sept points de passage par épisode</h3>
-<pre>1. HOME        joint space, fixed constant2. APPROACH    (obj_x, obj_y, obj_z + 0.10)        yaw = grasp_yaw3. DESCEND     (obj_x, obj_y, obj_z + grasp_dz)    yaw = grasp_yaw   [GRASP      gripper close; attach if A8 — no motion]4. LIFT        (obj_x, obj_y, obj_z + 0.10)        yaw unchanged5. TRANSPORT   (bin_x, bin_y, bin_rim_z + 0.10)6. RELEASE     (bin_x, bin_y, bin_rim_z + 0.03)   [OPEN       gripper open; detach if A8 — no motion]7. RETREAT     (bin_x, bin_y, bin_rim_z + 0.10)    then HOME</pre>
+<pre>1. HOME        joint space, fixed constant
+2. APPROACH    (obj_x, obj_y, obj_z + 0.10)        yaw = grasp_yaw
+3. DESCEND     (obj_x, obj_y, obj_z + grasp_dz)    yaw = grasp_yaw
+   [GRASP      gripper close; attach if A8 — no motion]
+4. LIFT        (obj_x, obj_y, obj_z + 0.10)        yaw unchanged
+5. TRANSPORT   (bin_x, bin_y, bin_rim_z + 0.10)
+6. RELEASE     (bin_x, bin_y, bin_rim_z + 0.03)
+   [OPEN       gripper open; detach if A8 — no motion]
+7. RETREAT     (bin_x, bin_y, bin_rim_z + 0.10)    then HOME</pre>
 <p class="prose">Soixante épisodes × sept points de passage font <b>420 résolutions d’IK</b>.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">7.4 Précalculer, ne jamais résoudre dans la boucle</h3>
 <p class="prose">Un échec d’IK découvert pendant un épisode gaspille tout l’épisode et sa mise en route. Découvert hors ligne, il ne coûte rien.</p>
-<pre>python3 scripts/precompute_ik.py \  --matrix         config/episode_matrix.csv \  --objects        config/objects.yaml \  --gripper-frame  config/gripper_frame.yaml \  --require-elbow-up \  --branch-max-step 0.6 \  --seeds 12 \  --out            config/waypoints.json
-# scripts/check_waypoints.py — must pass before any episode is recordedimport json, sysw = json.load(open("config/waypoints.json"))problems = []if len(w) != 60:    problems.append(f"expected 60 episode entries, found {len(w)}")for k, seq in w.items():    if seq is None:        problems.append(f"{k}: no solution"); continue    if len(seq) != 7:        problems.append(f"{k}: {len(seq)} waypoints, expected 7")    for i, q in enumerate(seq):        if q is None:            problems.append(f"{k}: waypoint {i} unsolved")        elif q[2] &gt;= 0:            problems.append(f"{k}: waypoint {i} elbow-DOWN (J3={q[2]:.3f})")    for i, (a, b) in enumerate(zip(seq, seq[1:])):        if a and b:            step = max(abs(x - y) for x, y in zip(a, b))            if step &gt; 0.6:                problems.append(f"{k}: branch jump {step:.2f} rad "                                f"between waypoints {i} and {i+1}")print("\n".join(problems) if problems else f"{len(w)} episodes: all waypoints OK")sys.exit(1 if problems else 0)</pre>
+<pre>python3 scripts/precompute_ik.py \
+  --matrix         config/episode_matrix.csv \
+  --objects        config/objects.yaml \
+  --gripper-frame  config/gripper_frame.yaml \
+  --require-elbow-up \
+  --branch-max-step 0.6 \
+  --seeds 12 \
+  --out            config/waypoints.json
+# scripts/check_waypoints.py — must pass before any episode is recorded
+import json, sys
+w = json.load(open("config/waypoints.json"))
+problems = []
+if len(w) != 60:
+    problems.append(f"expected 60 episode entries, found {len(w)}")
+for k, seq in w.items():
+    if seq is None:
+        problems.append(f"{k}: no solution"); continue
+    if len(seq) != 7:
+        problems.append(f"{k}: {len(seq)} waypoints, expected 7")
+    for i, q in enumerate(seq):
+        if q is None:
+            problems.append(f"{k}: waypoint {i} unsolved")
+        elif q[2] &gt;= 0:
+            problems.append(f"{k}: waypoint {i} elbow-DOWN (J3={q[2]:.3f})")
+    for i, (a, b) in enumerate(zip(seq, seq[1:])):
+        if a and b:
+            step = max(abs(x - y) for x, y in zip(a, b))
+            if step &gt; 0.6:
+                problems.append(f"{k}: branch jump {step:.2f} rad "
+                                f"between waypoints {i} and {i+1}")
+print("\n".join(problems) if problems else f"{len(w)} episodes: all waypoints OK")
+sys.exit(1 if problems else 0)</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">7.5 Cohérence de branche sur tout l’épisode</h3>
 <p class="prose"><code>J3 &lt; 0</code> à chaque résolution est nécessaire mais pas suffisant. La <i>séquence</i> doit rester sur une seule branche. Un changement de branche entre LIFT et TRANSPORT produit une grande rotation du poignet en plein transport, qui projette un objet saisi physiquement et, dans tous les cas, paraît absurde dans les images enregistrées — enseignant à la politique un mouvement qu’aucun contrôleur sensé ne produirait.</p>
 <p class="prose">Le seuil de 0,6 rad par articulation et par point de passage de <code>check_waypoints.py</code> le détecte. Si une séquence échoue, réensemencer la résolution de cet épisode plutôt que d’abaisser le seuil.</p>
@@ -695,10 +1046,97 @@ main a { color: var(--accent); }
 </section>
 <section class="block" id="partie-8-tape-7-la-s-quence-d-pisode"><h2>Partie 8 — Étape 7 : la séquence d’épisode</h2>
 <h3 style="margin-top:26px;font-size:1.1rem">8.1 Apparition de la scène</h3>
-<pre># scripts/spawn_scene.pyimport subprocess, yaml, csv, sys, time, argparsedef spawn(model_file, name, x, y, z, world):    subprocess.run(["ros2", "run", "ros_gz_sim", "create",                    "-world", world, "-file", model_file, "-name", name,                    "-x", str(x), "-y", str(y), "-z", str(z)],                   check=True, timeout=90)          # bounded — see Part 10.2def main():    ap = argparse.ArgumentParser()    ap.add_argument("--episode", type=int, required=True)    args = ap.parse_args()    cfg   = yaml.safe_load(open("config/objects.yaml"))    world = open(cfg["world_path_file"]).read().strip()    row   = next(r for r in csv.DictReader(open("config/episode_matrix.csv"))                 if int(r["episode"]) == args.episode)    # bins first — they are static and define the keepout regions    for bn in cfg["bins"]:        spawn(f"models/{bn}.sdf", bn, *cfg["bins"][bn]["pose"], world)    # then ALL FOUR objects — target and distractors alike (Part 5.2)    for name, o in cfg["objects"].items():        half = (o["size"][2] / 2) if o["shape"] == "box" else (o["length"] / 2)        z = cfg["table_top_z"] + half + 0.0005      # 0.5 mm above, let it settle        spawn(f"models/{name}.sdf", name,              float(row[f"{name}_x"]), float(row[f"{name}_y"]), z, world)    # settle in SIMULATION time, not wall clock    settle_sim = cfg["spawn"]["settle_seconds_sim"]    rtf = float(subprocess.run(["python3", "scripts/measure_rtf.py"],                               capture_output=True, text=True).stdout or 0.1)    time.sleep(settle_sim / max(rtf, 0.02))    # verify every object landed where intended    bad = []    for name in cfg["objects"]:        p = read_pose(name)                          # gz model -m &lt;name&gt; -p        want = (float(row[f"{name}_x"]), float(row[f"{name}_y"]))        if abs(p[0]-want[0]) &gt; 0.01 or abs(p[1]-want[1]) &gt; 0.01:            bad.append((name, want, p[:2]))    if bad:        print("SPAWN DRIFT:", bad); sys.exit(1)    print("scene OK")if __name__ == "__main__":    main()</pre>
+<pre># scripts/spawn_scene.py
+import subprocess, yaml, csv, sys, time, argparse
+
+def spawn(model_file, name, x, y, z, world):
+    subprocess.run(["ros2", "run", "ros_gz_sim", "create",
+                    "-world", world, "-file", model_file, "-name", name,
+                    "-x", str(x), "-y", str(y), "-z", str(z)],
+                   check=True, timeout=90)          # bounded — see Part 10.2
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--episode", type=int, required=True)
+    args = ap.parse_args()
+
+    cfg   = yaml.safe_load(open("config/objects.yaml"))
+    world = open(cfg["world_path_file"]).read().strip()
+    row   = next(r for r in csv.DictReader(open("config/episode_matrix.csv"))
+                 if int(r["episode"]) == args.episode)
+
+    # bins first — they are static and define the keepout regions
+    for bn in cfg["bins"]:
+        spawn(f"models/{bn}.sdf", bn, *cfg["bins"][bn]["pose"], world)
+
+    # then ALL FOUR objects — target and distractors alike (Part 5.2)
+    for name, o in cfg["objects"].items():
+        half = (o["size"][2] / 2) if o["shape"] == "box" else (o["length"] / 2)
+        z = cfg["table_top_z"] + half + 0.0005      # 0.5 mm above, let it settle
+        spawn(f"models/{name}.sdf", name,
+              float(row[f"{name}_x"]), float(row[f"{name}_y"]), z, world)
+
+    # settle in SIMULATION time, not wall clock
+    settle_sim = cfg["spawn"]["settle_seconds_sim"]
+    rtf = float(subprocess.run(["python3", "scripts/measure_rtf.py"],
+                               capture_output=True, text=True).stdout or 0.1)
+    time.sleep(settle_sim / max(rtf, 0.02))
+
+    # verify every object landed where intended
+    bad = []
+    for name in cfg["objects"]:
+        p = read_pose(name)                          # gz model -m &lt;name&gt; -p
+        want = (float(row[f"{name}_x"]), float(row[f"{name}_y"]))
+        if abs(p[0]-want[0]) &gt; 0.01 or abs(p[1]-want[1]) &gt; 0.01:
+            bad.append((name, want, p[:2]))
+    if bad:
+        print("SPAWN DRIFT:", bad); sys.exit(1)
+    print("scene OK")
+
+if __name__ == "__main__":
+    main()</pre>
 <p class="prose"><b>Notez le calcul de la stabilisation.</b> Attendre <code>sleep 3</code> attend trois secondes <i>d’horloge murale</i>, ce qui à un RTF de 0,082 représente un quart de seconde de simulation — pas assez pour que quoi que ce soit se stabilise. Toute attente de ce pipeline qui concerne la physique doit être exprimée en temps de simulation et divisée par le facteur temps réel mesuré. L’acquisition précédente avait des attentes de stabilisation en temps d’horloge murale, et elles y sont citées comme cause possible de non-reproductibilité.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">8.2 Le pilote de séquence</h3>
-<pre># scripts/run_pick_and_place.py — the changed coreimport yaml, json, time, csv, argparsecfg = yaml.safe_load(open("config/objects.yaml"))wps = json.load(open("config/waypoints.json"))ap = argparse.ArgumentParser()ap.add_argument("--episode", type=int, required=True)ap.add_argument("--target", required=True)ap.add_argument("--record", action="store_true")ap.add_argument("--log",  default="grasp_log.csv")ap.add_argument("--meta", default="grasp_meta.json")args = ap.parse_args()spec     = cfg["objects"][args.target]bin_name = spec["bin"]seq      = wps[f"ep{args.episode:03d}"]STEPS = [    ("home",      lambda: goto_joints(HOME_Q),              1.0),    ("approach",  lambda: goto_joints(seq[0]),              2.0),    ("descend",   lambda: goto_joints(seq[1]),              2.0),    ("grasp",     lambda: close_gripper_and_attach(args.target), 2.0),  # &gt; 1.6 s    ("lift",      lambda: goto_joints(seq[2]),              2.0),    ("transport", lambda: goto_joints(seq[3]),              3.0),    ("release",   lambda: goto_joints(seq[4]),              2.0),    ("open",      lambda: open_gripper_and_detach(args.target),   2.0),  # &gt; 1.6 s    ("retreat",   lambda: goto_joints(seq[5]),              2.0),    ("home",      lambda: goto_joints(HOME_Q),              2.0),]start_poses = snapshot_all_objects("start")     # ALL FOUR — Part 9.3 needs thisfailed_at = Nonefor name, action, settle_sim in STEPS:    log(f"--- {name}  [{args.target} -&gt; {bin_name}] ---")    if action() is False:        log(f"FAILED at {name}"); failed_at = name; break    time.sleep(settle_sim / max(current_rtf(), 0.02))   # sim time, not wall    snapshot_all_objects(name)end_poses = snapshot_all_objects("end")</pre>
+<pre># scripts/run_pick_and_place.py — the changed core
+import yaml, json, time, csv, argparse
+
+cfg = yaml.safe_load(open("config/objects.yaml"))
+wps = json.load(open("config/waypoints.json"))
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--episode", type=int, required=True)
+ap.add_argument("--target", required=True)
+ap.add_argument("--record", action="store_true")
+ap.add_argument("--log",  default="grasp_log.csv")
+ap.add_argument("--meta", default="grasp_meta.json")
+args = ap.parse_args()
+
+spec     = cfg["objects"][args.target]
+bin_name = spec["bin"]
+seq      = wps[f"ep{args.episode:03d}"]
+
+STEPS = [
+    ("home",      lambda: goto_joints(HOME_Q),              1.0),
+    ("approach",  lambda: goto_joints(seq[0]),              2.0),
+    ("descend",   lambda: goto_joints(seq[1]),              2.0),
+    ("grasp",     lambda: close_gripper_and_attach(args.target), 2.0),  # &gt; 1.6 s
+    ("lift",      lambda: goto_joints(seq[2]),              2.0),
+    ("transport", lambda: goto_joints(seq[3]),              3.0),
+    ("release",   lambda: goto_joints(seq[4]),              2.0),
+    ("open",      lambda: open_gripper_and_detach(args.target),   2.0),  # &gt; 1.6 s
+    ("retreat",   lambda: goto_joints(seq[5]),              2.0),
+    ("home",      lambda: goto_joints(HOME_Q),              2.0),
+]
+
+start_poses = snapshot_all_objects("start")     # ALL FOUR — Part 9.3 needs this
+failed_at = None
+for name, action, settle_sim in STEPS:
+    log(f"--- {name}  [{args.target} -&gt; {bin_name}] ---")
+    if action() is False:
+        log(f"FAILED at {name}"); failed_at = name; break
+    time.sleep(settle_sim / max(current_rtf(), 0.02))   # sim time, not wall
+    snapshot_all_objects(name)
+end_poses = snapshot_all_objects("end")</pre>
 <p class="prose">Quatre changements par rapport à l’acquisition précédente, tous petits :</p>
 <ol class="prose">
 <li><b>Choix de la cible</b> — <code>--target</code> tiré de la ligne de la matrice, pas un objet codé en dur</li>
@@ -731,21 +1169,93 @@ main a { color: var(--accent); }
 <p class="prose"><b>Était-ce le <i>bon</i> bac ?</b></p>
 <p class="prose">L’acquisition précédente avait une seule destination, si bien que « déposé » et « déposé correctement » étaient la même question. Ce sont désormais deux questions différentes, et l’échec de mauvais bac est <b>invisible pour tous les contrôles de 9.1</b> : l’objet a été saisi, transporté et lâché dans <i>un</i> bac. Tous les critères numériques passent. L’épisode est quand même faux, et l’instruction qui lui est attachée est fausse.</p>
 <p class="prose"><b>Un épisode avec une instruction fausse est pire que pas d’épisode du tout.</b> Il enseigne au modèle le contraire de la tâche, et avec la même assurance qu’un épisode correct.</p>
-<pre># scripts/checks.pyimport mathdef placed_in_correct_bin(target, cfg, obj_pose, tol=0.005):    """Inside its OWN bin footprint, and below the rim — not resting on it."""    b = cfg["bins"][cfg["objects"][target]["bin"]]    dx, dy = obj_pose[0] - b["pose"][0], obj_pose[1] - b["pose"][1]    inside  = math.hypot(dx, dy) &lt;= (b["inner_radius"] - tol)    settled = obj_pose[2] &lt;= b["rim_z"]    return inside and settled, {"inside": inside, "below_rim": settled}def landed_in_wrong_bin(target, cfg, obj_pose):    """Explicitly detect the silent failure."""    own = cfg["objects"][target]["bin"]    for bn, b in cfg["bins"].items():        if bn == own:            continue        if math.hypot(obj_pose[0] - b["pose"][0],                      obj_pose[1] - b["pose"][1]) &lt;= b["inner_radius"]:            return bn    return None</pre>
+<pre># scripts/checks.py
+import math
+
+def placed_in_correct_bin(target, cfg, obj_pose, tol=0.005):
+    """Inside its OWN bin footprint, and below the rim — not resting on it."""
+    b = cfg["bins"][cfg["objects"][target]["bin"]]
+    dx, dy = obj_pose[0] - b["pose"][0], obj_pose[1] - b["pose"][1]
+    inside  = math.hypot(dx, dy) &lt;= (b["inner_radius"] - tol)
+    settled = obj_pose[2] &lt;= b["rim_z"]
+    return inside and settled, {"inside": inside, "below_rim": settled}
+
+def landed_in_wrong_bin(target, cfg, obj_pose):
+    """Explicitly detect the silent failure."""
+    own = cfg["objects"][target]["bin"]
+    for bn, b in cfg["bins"].items():
+        if bn == own:
+            continue
+        if math.hypot(obj_pose[0] - b["pose"][0],
+                      obj_pose[1] - b["pose"][1]) &lt;= b["inner_radius"]:
+            return bn
+    return None</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">9.3 Les distracteurs ont-ils été dérangés ?</h3>
 <p class="prose">Un épisode dans lequel la pince a poussé le cube bleu à travers la table en allant chercher le rouge est une mauvaise démonstration : les images montrent un mouvement que l’instruction ne décrit pas.</p>
-<pre>def distractors_undisturbed(target, start_poses, end_poses, tol=0.02):    moved = []    for name, p0 in start_poses.items():        if name == target:            continue        d = math.dist(p0[:2], end_poses[name][:2])        if d &gt; tol:            moved.append([name, round(d, 4)])    return (not moved), moved</pre>
+<pre>def distractors_undisturbed(target, start_poses, end_poses, tol=0.02):
+    moved = []
+    for name, p0 in start_poses.items():
+        if name == target:
+            continue
+        d = math.dist(p0[:2], end_poses[name][:2])
+        if d &gt; tol:
+            moved.append([name, round(d, 4)])
+    return (not moved), moved</pre>
 <p class="prose">Traiter un distracteur dérangé comme un <b>avertissement, pas un échec bloquant</b>. Le consigner ; décider au moment de l’assemblage du jeu de données s’il faut l’exclure. Les vraies démonstrations comportent des contacts fortuits. Ce qui ne doit jamais être enregistré, c’est un épisode <i>mal étiqueté</i>.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">9.4 Le fichier de verdict de l’épisode</h3>
-<pre>{  "episode": 27,  "target": "green_cylinder",  "task_index": 2,  "instruction": "pick up the green cylinder and place it in the green bin",  "expected_bin": "green_bin",  "rc": 0,  "grasp_held": true,  "rise_m": 0.132,  "placed_in_correct_bin": true,  "landed_in_wrong_bin": null,  "distractors_moved": [["yellow_box", 0.031]],  "simulated_attachment": true,  "attach_target_link": "link6",  "camera": "table_camera",  "split": "train",  "rtf_observed": 0.271,  "wall_seconds": 312,  "sim_seconds": 84.6,  "host_role": "B",  "world_sha256": "…",  "verdict": "PASS"}</pre>
+<pre>{
+  "episode": 27,
+  "target": "green_cylinder",
+  "task_index": 2,
+  "instruction": "pick up the green cylinder and place it in the green bin",
+  "expected_bin": "green_bin",
+  "rc": 0,
+  "grasp_held": true,
+  "rise_m": 0.132,
+  "placed_in_correct_bin": true,
+  "landed_in_wrong_bin": null,
+  "distractors_moved": [["yellow_box", 0.031]],
+  "simulated_attachment": true,
+  "attach_target_link": "link6",
+  "camera": "table_camera",
+  "split": "train",
+  "rtf_observed": 0.271,
+  "wall_seconds": 312,
+  "sim_seconds": 84.6,
+  "host_role": "B",
+  "world_sha256": "…",
+  "verdict": "PASS"
+}</pre>
 <p class="prose"><code>simulated_attachment</code> figure dans chaque enregistrement, quelle que soit la décision de la partie 3. Si la saisie physique a été adoptée, il vaut <code>false</code>, et ce seul champ devient la ligne la plus précieuse du fichier.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">9.5 Tester le vérificateur sur un épisode connu comme mauvais</h3>
 <p class="prose">Un vérificateur qui n’a jamais rien rejeté n’est pas un vérificateur.</p>
-<pre># deliberately mis-target: fetch the red cube, aim at the blue binpython3 scripts/run_pick_and_place.py --episode 901 --target red_cube \        --force-bin blue_bin --log /tmp/bad.csv --meta /tmp/bad.jsonpython3 scripts/verify_episode.py /tmp/bad.json \  &amp;&amp; echo "FAIL: verifier accepted a wrong-bin episode" \  || echo "OK: verifier rejected it"</pre>
+<pre># deliberately mis-target: fetch the red cube, aim at the blue bin
+python3 scripts/run_pick_and_place.py --episode 901 --target red_cube \
+        --force-bin blue_bin --log /tmp/bad.csv --meta /tmp/bad.json
+python3 scripts/verify_episode.py /tmp/bad.json \
+  &amp;&amp; echo "FAIL: verifier accepted a wrong-bin episode" \
+  || echo "OK: verifier rejected it"</pre>
 <p class="prose">Faire de même pour un cas sans levée et pour un cas de distracteur dérangé. Trois échecs délibérés, trois rejets corrects, avant que le lot ne tourne.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">9.6 Rapport d’état du lot</h3>
 <p class="prose">Étendre le script d’état fondé sur la vérité terrain — qui lit le système de fichiers, jamais la mémoire de l’agent ou de l’opérateur — pour ventiler par objet et par répartition :</p>
-<pre>=== status.sh — read at ===  UTC:          2026-09-__ __:__:__ UTC  Europe/Paris: 2026-09-__ __:__:__ CEST=== per-object status ===red_cube        12/12 train   3/3 heldout   OKblue_cube       12/12 train   3/3 heldout   OKgreen_cylinder  11/12 train   3/3 heldout   1 FAILED  (grasp_held=false, ep 34)yellow_box      12/12 train   2/3 heldout   1 WRONG_BIN (ep 58 -&gt; green_bin)=== totals (counted above, not asserted) ===  PASSED=57  FAILED=1  WRONG_BIN=1  MISSING=1  (sum=60 of 60)=== most recently modified episode folder ===  ep_058, 7 minutes ago=== container uptime vs wall-clock elapsed (reveals a host suspend) ===  GAP: +0s — no evidence of a suspend since container start</pre>
+<pre>=== status.sh — read at ===
+  UTC:          2026-09-__ __:__:__ UTC
+  Europe/Paris: 2026-09-__ __:__:__ CEST
+
+=== per-object status ===
+red_cube        12/12 train   3/3 heldout   OK
+blue_cube       12/12 train   3/3 heldout   OK
+green_cylinder  11/12 train   3/3 heldout   1 FAILED  (grasp_held=false, ep 34)
+yellow_box      12/12 train   2/3 heldout   1 WRONG_BIN (ep 58 -&gt; green_bin)
+
+=== totals (counted above, not asserted) ===
+  PASSED=57  FAILED=1  WRONG_BIN=1  MISSING=1  (sum=60 of 60)
+
+=== most recently modified episode folder ===
+  ep_058, 7 minutes ago
+
+=== container uptime vs wall-clock elapsed (reveals a host suspend) ===
+  GAP: +0s — no evidence of a suspend since container start</pre>
 <p class="prose">Trois propriétés de cette sortie sont délibérées et doivent être conservées :</p>
 <ol class="prose">
 <li><b>Les deux horloges, étiquetées.</b> Mélanger UTC et heure locale sans dire laquelle a produit une vraie contradiction de plusieurs heures lors de l’acquisition précédente.</li>
@@ -763,23 +1273,57 @@ main a { color: var(--accent); }
 </ul>
 <p class="prose">Les deux doivent inclure l’<b>articulation de la pince</b> dans <code>observation.state</code> et <code>action</code>. Une politique de tri qui ne peut pas commander la pince ne peut pas accomplir la tâche. L’acquisition précédente l’a ajoutée à ses contrats ; la reprendre.</p>
 <p class="prose"><b>Et les deux doivent exclure les poses des objets de <code>observation.*</code></b> — voir A5. La vérité terrain appartient uniquement aux métadonnées de l’épisode. Le vérifier explicitement :</p>
-<pre>for c in contracts/mycobot_sorting*.yaml; do  echo "== $c"  grep -A20 'observation' "$c" | grep -iE "cube|cylinder|box|bin|model_pose" \    &amp;&amp; echo "  FATAL: ground truth is leaking into the observation stream" \    || echo "  observation stream clean"done</pre>
+<pre>for c in contracts/mycobot_sorting*.yaml; do
+  echo "== $c"
+  grep -A20 'observation' "$c" | grep -iE "cube|cylinder|box|bin|model_pose" \
+    &amp;&amp; echo "  FATAL: ground truth is leaking into the observation stream" \
+    || echo "  observation stream clean"
+done</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">10.2 Mise en route de l’enregistreur, avec les correctifs déjà payés</h3>
 <p class="prose">Trois détails chèrement acquis lors de l’acquisition précédente :</p>
 <p class="prose"><b>Utiliser la forme sans démon du cycle de vie.</b> La commande <code>ros2 lifecycle</code> signale « node not found » pour un enregistreur qui a en fait démarré, à cause d’un cache de démon périmé. Cela a coûté trois tentatives ratées et environ 1 h 49 min sur un seul épisode.</p>
-<pre>ros2 lifecycle set --no-daemon --spin-time 15 /episode_recorder configureros2 lifecycle set --no-daemon --spin-time 15 /episode_recorder activate</pre>
+<pre>ros2 lifecycle set --no-daemon --spin-time 15 /episode_recorder configure
+ros2 lifecycle set --no-daemon --spin-time 15 /episode_recorder activate</pre>
 <p class="prose">Ne jamais utiliser la forme nue.</p>
 <p class="prose"><b>Ne jamais attendre seulement un fichier marqueur de sortie.</b> Un observateur qui ne guette qu’une sentinelle de succès ne peut pas distinguer « travaille encore » de « processus tué », et il annoncera toujours la version rassurante. L’acquisition précédente a perdu une nuit entière à cause d’un observateur qui guettait un marqueur qu’un processus mort n’écrirait jamais.</p>
-<pre>wait_for() {                       # usage: wait_for &lt;pid&gt; &lt;marker&gt; &lt;timeout_s&gt;  local pid=$1 marker=$2 deadline=$(( $(date +%s) + $3 ))  while [ ! -f "$marker" ]; do    kill -0 "$pid" 2&gt;/dev/null || { echo "PROCESS DIED before marker"; return 2; }    [ "$(date +%s)" -gt "$deadline" ] &amp;&amp; { echo "TIMEOUT"; return 3; }    sleep 2  done  return 0}</pre>
+<pre>wait_for() {                       # usage: wait_for &lt;pid&gt; &lt;marker&gt; &lt;timeout_s&gt;
+  local pid=$1 marker=$2 deadline=$(( $(date +%s) + $3 ))
+  while [ ! -f "$marker" ]; do
+    kill -0 "$pid" 2&gt;/dev/null || { echo "PROCESS DIED before marker"; return 2; }
+    [ "$(date +%s)" -gt "$deadline" ] &amp;&amp; { echo "TIMEOUT"; return 3; }
+    sleep 2
+  done
+  return 0
+}</pre>
 <p class="prose"><b>Borner chaque étape.</b> Chaque <code>ros_gz_sim create</code> reçoit un délai de 90 s ; chaque tentative un chien de garde de 25 minutes ; l’étape de configuration de l’enregistreur est réessayée une fois avec un plafond de 60 s. Une tentative normale prend environ 3 minutes sur le portable de la partie 0.2.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">10.3 Redémarrage propre à chaque épisode</h3>
 <p class="prose">Redémarrer toute la pile de simulation à chaque épisode. Cela coûte du temps de mise en route et achète de la reproductibilité. L’acquisition précédente a documenté <code>move_group</code> entrant dans un état <code>executing</code> bloqué après une trajectoire résiduelle, faisant échouer en silence tous les mouvements suivants — un redémarrage est le seul remède fiable, et détecter cet état en plein lot est plus difficile que de l’éviter.</p>
-<pre># scripts/episode.sh (structure)#   1. kill the stack        pkill gz sim / move_group / robot_state_publisher#   2. relaunch sim          + wait for all controllers 'active'#   3. spawn_scene.py        bins, then all four objects, then settle#   4. launch move_group     + wait for readiness in its log#   5. recorder configure/activate   (--no-daemon --spin-time 15)#   6. run_pick_and_place.py --record#   7. verify_episode.py     -&gt; PASS / FAIL / WRONG_BIN#   8. stage timestamps to  /workspace/stage_&lt;idx&gt;.log  (OUTSIDE the episode#      folder, so a retry that deletes the folder does not erase the evidence)</pre>
+<pre># scripts/episode.sh (structure)
+#   1. kill the stack        pkill gz sim / move_group / robot_state_publisher
+#   2. relaunch sim          + wait for all controllers 'active'
+#   3. spawn_scene.py        bins, then all four objects, then settle
+#   4. launch move_group     + wait for readiness in its log
+#   5. recorder configure/activate   (--no-daemon --spin-time 15)
+#   6. run_pick_and_place.py --record
+#   7. verify_episode.py     -&gt; PASS / FAIL / WRONG_BIN
+#   8. stage timestamps to  /workspace/stage_&lt;idx&gt;.log  (OUTSIDE the episode
+#      folder, so a retry that deletes the folder does not erase the evidence)</pre>
 <p class="prose">Ce dernier point compte : quand l’acquisition précédente rejouait un épisode raté, la reprise supprimait le dossier contenant la preuve de la cause de l’échec, rendant la cause racine irrécupérable.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">10.4 Organisation du jeu de données</h3>
-<pre>datasets/├── mycobot_sorting_train/               # 48 episodes, table camera│   ├── meta/info.json│   ├── meta/episodes.jsonl│   ├── meta/tasks.jsonl                 # exactly the four tasks from Part 5.4│   ├── data/chunk-000/episode_XXX.parquet│   └── videos/chunk-000/observation.images.table/episode_XXX.mp4└── mycobot_sorting_heldout/             # 12 episodes, second camera    └── … same structure …</pre>
+<pre>datasets/
+├── mycobot_sorting_train/               # 48 episodes, table camera
+│   ├── meta/info.json
+│   ├── meta/episodes.jsonl
+│   ├── meta/tasks.jsonl                 # exactly the four tasks from Part 5.4
+│   ├── data/chunk-000/episode_XXX.parquet
+│   └── videos/chunk-000/observation.images.table/episode_XXX.mp4
+└── mycobot_sorting_heldout/             # 12 episodes, second camera
+    └── … same structure …</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">10.5 Convertir sans PyTorch</h3>
-<pre>python3 scripts/port_bag.py --out datasets/mycobot_sorting_train \        --matrix config/episode_matrix.csv --split trainpython3 scripts/port_bag.py --out datasets/mycobot_sorting_heldout \        --matrix config/episode_matrix.csv --split heldout</pre>
+<pre>python3 scripts/port_bag.py --out datasets/mycobot_sorting_train \
+        --matrix config/episode_matrix.csv --split train
+python3 scripts/port_bag.py --out datasets/mycobot_sorting_heldout \
+        --matrix config/episode_matrix.csv --split heldout</pre>
 <p class="prose"><b>C’est tranché et il ne faut pas y revenir.</b> Le format LeRobot est fait de parquet, de MP4 et de JSON ; <code>pyarrow</code> et <code>ffmpeg</code> produisent tout cela. PyTorch est nécessaire pour <i>entraîner</i>, pas pour <i>sérialiser</i>. L’acquisition précédente a perdu une nuit à installer une version CPU de PyTorch de 999 Mo dans un répertoire du conteneur ensuite détruit par un redémarrage du conteneur — deux fois, parce que l’environnement virtuel se trouvait dans le système de fichiers du conteneur et non sur un chemin monté.</p>
 <p class="prose"><b>Corollaire :</b> tout ce qui doit survivre à un redémarrage du conteneur va sur le chemin monté, à côté des épisodes, jamais dans le système de fichiers du conteneur.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">10.6 La validation est reportée — le dire</h3>
@@ -813,14 +1357,93 @@ main a { color: var(--accent); }
 <p class="prose">Un monde à quatre objets et quatre bacs compte nettement plus de paires de collision qu’un bloc unique et une plaque statique. Lancer le lot sans marge de mémoire ne risque pas seulement d’être lent. Il risque d’être faux d’une manière qui ressemble à des données.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">11.4 Le paquet</h3>
 <p class="prose">Le répertoire du projet contient exactement ceci, et rien qui demande une explication :</p>
-<pre>Four_Object_Sorting_Acquisition/├── RUNNING.md                    # three commands; expected output; success criteria├── preflight.sh                  # environment check, pass/fail, run FIRST├── config/│   ├── WORLD_PATH                # one line: the chosen world│   ├── objects.yaml              # geometry, grasp params, instructions, bins│   ├── gripper_frame.yaml        # measured fingertip offsets│   ├── episode_matrix.csv        # 60 rows: target, positions, camera, split│   ├── waypoints.json            # 420 pre-solved, elbow-up, branch-consistent│   ├── tasks.jsonl               # the four instructions│   └── reach_map.csv             # the measured reachable envelope├── scripts/│   ├── spawn_scene.py            # 4 objects + 4 bins, collision-checked│   ├── run_pick_and_place.py     # per-object sequence│   ├── episode.sh                # one episode, clean restart, watchdog│   ├── batch.sh                  # 1..60, 3 retries each│   ├── verify_episode.py         # PASS / FAIL / WRONG_BIN│   ├── status.sh                 # per-object, per-split ground truth│   ├── track_grasp.py            # pose logger│   ├── grab_frame.py             # headless camera capture│   └── port_bag.py               # bag -&gt; LeRobot, no PyTorch├── contracts/│   ├── mycobot_sorting.yaml│   └── mycobot_sorting_heldout.yaml├── models/                       # local copies or symlinks, as spawned└── doc/    ├── WORLD_SELECTION.md        # Part 2 verdict, with hash    ├── GRASP_DECISION.md         # Part 3 verdict, with CSV evidence    └── ASSUMPTIONS.md            # Part 1 register, annotated with outcomes</pre>
+<pre>Four_Object_Sorting_Acquisition/
+├── RUNNING.md                    # three commands; expected output; success criteria
+├── preflight.sh                  # environment check, pass/fail, run FIRST
+├── config/
+│   ├── WORLD_PATH                # one line: the chosen world
+│   ├── objects.yaml              # geometry, grasp params, instructions, bins
+│   ├── gripper_frame.yaml        # measured fingertip offsets
+│   ├── episode_matrix.csv        # 60 rows: target, positions, camera, split
+│   ├── waypoints.json            # 420 pre-solved, elbow-up, branch-consistent
+│   ├── tasks.jsonl               # the four instructions
+│   └── reach_map.csv             # the measured reachable envelope
+├── scripts/
+│   ├── spawn_scene.py            # 4 objects + 4 bins, collision-checked
+│   ├── run_pick_and_place.py     # per-object sequence
+│   ├── episode.sh                # one episode, clean restart, watchdog
+│   ├── batch.sh                  # 1..60, 3 retries each
+│   ├── verify_episode.py         # PASS / FAIL / WRONG_BIN
+│   ├── status.sh                 # per-object, per-split ground truth
+│   ├── track_grasp.py            # pose logger
+│   ├── grab_frame.py             # headless camera capture
+│   └── port_bag.py               # bag -&gt; LeRobot, no PyTorch
+├── contracts/
+│   ├── mycobot_sorting.yaml
+│   └── mycobot_sorting_heldout.yaml
+├── models/                       # local copies or symlinks, as spawned
+└── doc/
+    ├── WORLD_SELECTION.md        # Part 2 verdict, with hash
+    ├── GRASP_DECISION.md         # Part 3 verdict, with CSV evidence
+    └── ASSUMPTIONS.md            # Part 1 register, annotated with outcomes</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">11.5 <code>RUNNING.md</code> — ce qu’il doit contenir</h3>
 <p class="prose">Trois commandes, et rien d’autre en haut de page.</p>
-<pre># Running the four-object sorting acquisition## 1. Check the environment    bash preflight.shExpect `PREFLIGHT PASSED`. If not, stop — the failing line names the cause.## 2. Run the batch                       (~5–8 hours)    bash scripts/batch.sh 1 60Restarts the simulator per episode, up to 3 attempts each, 25-minutewatchdog per attempt. Safe to leave unattended.IMPORTANT: disable system sleep first — a suspended host presents as a stall.    powercfg /change standby-timeout-ac 0      (in Windows PowerShell, as admin)## 3. Check progress or the result — any time, in a separate terminal    bash scripts/status.sh## Success looks like    PASSED=60  FAILED=0  WRONG_BIN=0  MISSING=0  (sum=60 of 60)and 15 per object across train + heldout.## If an episode fails three times`status.sh` names it. Its stage log is at /workspace/stage_&lt;idx&gt;.log,outside the episode folder, so a retry cannot erase it. Send that file back.## What to returnEither `datasets/` (small) or the bags under /workspace/episodes/ (~5 GB).</pre>
+<pre># Running the four-object sorting acquisition
+
+## 1. Check the environment
+    bash preflight.sh
+Expect `PREFLIGHT PASSED`. If not, stop — the failing line names the cause.
+
+## 2. Run the batch                       (~5–8 hours)
+    bash scripts/batch.sh 1 60
+Restarts the simulator per episode, up to 3 attempts each, 25-minute
+watchdog per attempt. Safe to leave unattended.
+IMPORTANT: disable system sleep first — a suspended host presents as a stall.
+    powercfg /change standby-timeout-ac 0      (in Windows PowerShell, as admin)
+
+## 3. Check progress or the result — any time, in a separate terminal
+    bash scripts/status.sh
+
+## Success looks like
+    PASSED=60  FAILED=0  WRONG_BIN=0  MISSING=0  (sum=60 of 60)
+and 15 per object across train + heldout.
+
+## If an episode fails three times
+`status.sh` names it. Its stage log is at /workspace/stage_&lt;idx&gt;.log,
+outside the episode folder, so a retry cannot erase it. Send that file back.
+
+## What to return
+Either `datasets/` (small) or the bags under /workspace/episodes/ (~5 GB).</pre>
 <p class="prose">Si le lancement du lot demande une procédure en sept étapes, le paquet a échoué.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">11.6 <code>preflight.sh</code></h3>
 <p class="prose">Personne ne devrait découvrir une dépendance manquante quarante minutes après le début d’un lot.</p>
-<pre>#!/usr/bin/env bash# preflight.sh — verify this host can run the batch. Read-only. Exit 1 on failure.fail=0chk(){ printf '%-46s' "$1"; shift       if "$@" &gt;/dev/null 2&gt;&amp;1; then echo "OK"; else echo "FAIL"; fail=1; fi; }chk "container image present"        docker images --format '{{.Repository}}' \                                        --filter reference=gazebo_to_lerobotchk "ROS 2 Jazzy present"            test -f /opt/ros/jazzy/setup.bashchk "Gazebo (gz) on PATH"            which gzchk "ros_gz_sim create available"    bash -c 'ros2 pkg executables ros_gz_sim | grep -q create'chk "moveit_py importable"           python3 -c 'import moveit'chk "pyarrow importable"             python3 -c 'import pyarrow'chk "ffmpeg present"                 which ffmpegchk "config/WORLD_PATH readable"     test -s config/WORLD_PATHchk "target world file exists"       bash -c 'test -f "$(cat config/WORLD_PATH)"'chk "objects.yaml validates"         python3 scripts/validate_objects.pychk "60 episodes in matrix"          bash -c '[ $(($(wc -l &lt; config/episode_matrix.csv)-1)) -eq 60 ]'chk "420 waypoints solved"           python3 scripts/check_waypoints.pychk "tasks.jsonl has 4 tasks"        bash -c '[ $(wc -l &lt; config/tasks.jsonl) -eq 4 ]'chk "RAM &gt;= 16 GB"                   bash -c '[ $(free -g | awk "/^Mem:/{print \$2}") -ge 16 ]'chk "free disk &gt;= 20 GB"             bash -c '[ $(df -BG --output=avail . | tail -1 | tr -dc 0-9) -ge 20 ]'echoif [ $fail -eq 0 ]; then echo "PREFLIGHT PASSED"; else  echo "PREFLIGHT FAILED — do not start the batch"; fiexit $fail</pre>
+<pre>#!/usr/bin/env bash
+# preflight.sh — verify this host can run the batch. Read-only. Exit 1 on failure.
+fail=0
+chk(){ printf '%-46s' "$1"; shift
+       if "$@" &gt;/dev/null 2&gt;&amp;1; then echo "OK"; else echo "FAIL"; fail=1; fi; }
+
+chk "container image present"        docker images --format '{{.Repository}}' \
+                                        --filter reference=gazebo_to_lerobot
+chk "ROS 2 Jazzy present"            test -f /opt/ros/jazzy/setup.bash
+chk "Gazebo (gz) on PATH"            which gz
+chk "ros_gz_sim create available"    bash -c 'ros2 pkg executables ros_gz_sim | grep -q create'
+chk "moveit_py importable"           python3 -c 'import moveit'
+chk "pyarrow importable"             python3 -c 'import pyarrow'
+chk "ffmpeg present"                 which ffmpeg
+chk "config/WORLD_PATH readable"     test -s config/WORLD_PATH
+chk "target world file exists"       bash -c 'test -f "$(cat config/WORLD_PATH)"'
+chk "objects.yaml validates"         python3 scripts/validate_objects.py
+chk "60 episodes in matrix"          bash -c '[ $(($(wc -l &lt; config/episode_matrix.csv)-1)) -eq 60 ]'
+chk "420 waypoints solved"           python3 scripts/check_waypoints.py
+chk "tasks.jsonl has 4 tasks"        bash -c '[ $(wc -l &lt; config/tasks.jsonl) -eq 4 ]'
+chk "RAM &gt;= 16 GB"                   bash -c '[ $(free -g | awk "/^Mem:/{print \$2}") -ge 16 ]'
+chk "free disk &gt;= 20 GB"             bash -c '[ $(df -BG --output=avail . | tail -1 | tr -dc 0-9) -ge 20 ]'
+
+echo
+if [ $fail -eq 0 ]; then echo "PREFLIGHT PASSED"; else
+  echo "PREFLIGHT FAILED — do not start the batch"; fi
+exit $fail</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">11.7 L’ordre d’exécution</h3>
 <ol class="prose">
 <li>Terminer les parties 1 à 10 et les quatre épisodes d’essai de fumée, puis assembler le §11.4.</li>
@@ -841,7 +1464,9 @@ main a { color: var(--accent); }
 <p class="prose">Énoncer le troisième point avant de le découvrir à ses dépens vaut mieux qu’avoir raison par chance.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">11.9 Veille de l’hôte — la désactiver avant le lot</h3>
 <p class="prose">Plusieurs blocages apparents de plusieurs heures lors de l’acquisition précédente étaient l’hôte en veille, visible comme un saut entre l’heure murale et la durée de fonctionnement monotone du conteneur. Avant un lot sans surveillance, sur l’hôte Windows, dans un PowerShell administrateur :</p>
-<pre>powercfg /change standby-timeout-ac 0powercfg /change hibernate-timeout-ac 0powercfg /change monitor-timeout-ac 15</pre>
+<pre>powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+powercfg /change monitor-timeout-ac 15</pre>
 <p class="prose">L’écran se met toujours en veille ; la machine, non. <code>status.sh</code> signale l’écart de durée de fonctionnement, si bien qu’une veille, si elle survient malgré tout, est visible plutôt que mystérieuse.</p>
 </section>
 <section class="block" id="partie-12-ce-que-cela-ne-prouve-pas"><h2>Partie 12 — Ce que cela ne prouve pas</h2>
@@ -930,17 +1555,25 @@ main a { color: var(--accent); }
 <p class="prose">Les parties 1 à 13 et l’annexe C sont inchangées. Cette annexe étend la spécification à une seconde acquisition, demandée par le chef de projet robotique : des épisodes dans lesquels le robot saisit un objet d’une couleur et le dépose dans le bac de la même couleur, pour les quatre couleurs en un seul passage, dans le montage qu’Osama a construit et validé sur le dépôt de l’équipe (<code>ABMI-software/mycobot_320pi_R6A</code>, branche <code>main</code>, commit <code>36e2d4d5</code>, scène <code>tri_yolo</code>). Elle est écrite pour être exécutée par une seule personne sur le portable de la partie 0.2. Chaque étape, commande, mesure et bug se trouve dans <code>doc/FOUR_OBJECT_SORTING_REPORT</code> (addendum §29–43).</p>
 <h3 style="margin-top:26px;font-size:1.1rem">D.1 Objectif</h3>
 <p class="prose"><b>Chaque prise-dépôt produite par la scène d’Osama est enregistrée par l’enregistreur rosetta et transformée en données d’entraînement utilisables par SmolVLA, OpenVLA ou π0, sans réenregistrer.</b> Un épisode est une prise-dépôt, de la pose d’observation à l’objet lâché dans son bac, avec une instruction par objet dans le vocabulaire de la partie 5.4. Le premier jalon est la campagne d’Osama lui-même : graines 1 à 10, quatre objets chacune, 40 épisodes.</p>
-<pre>Osama's sort ──► rosetta recorder ──► ROS 2 bag                                       ├─► LeRobot dataset  (SmolVLA, π0)                                       └─► RLDS dataset     (OpenVLA)</pre>
+<pre>Osama's sort ──► rosetta recorder ──► ROS 2 bag
+                                       ├─► LeRobot dataset  (SmolVLA, π0)
+                                       └─► RLDS dataset     (OpenVLA)</pre>
 <h3 style="margin-top:26px;font-size:1.1rem">D.2 Hypothèses propres à cette acquisition</h3>
 <div class="table-wrap"><table><thead><tr><th>ID</th><th>Énoncé</th><th>Vérification</th><th>Si fausse</th></tr></thead><tbody><tr><td>D-A1</td><td>Le montage d’Osama est repris sans changement : monde, modèles, randomiseur, cycle de tri (<code>sim_sorting_grasp</code>), contact physique de la pince.</td><td><code>git merge upstream/main</code>, puis <code>tri_yolo seed:=1</code> trie 4/4.</td><td>Arrêter ; consigner le changement et sa raison.</td></tr><tr><td>D-A2</td><td>Le démonstrateur peut lire les positions des objets et des bacs dans la vérité terrain de Gazebo (A5 s’applique).</td><td>Le contrat ne contient que des images et des articulations (D.5).</td><td>Spécification distincte pour une acquisition pilotée par la perception.</td></tr><tr><td>D-A3</td><td>Une graine fixe toute la disposition, donc les graines 1 à 10 d’Osama rejouent ses 40 scènes.</td><td>Régénérer la graine 1 avec <code>tri_scene.sample_tri_scene</code> ; les positions correspondent au journal de l’exécution.</td><td>Consigner les dispositions réellement utilisées.</td></tr><tr><td>D-A4</td><td>Tout tourne dans le conteneur <code>gazebo_to_lerobot</code> (A11), avec un rendu logiciel.</td><td><code>docker exec gazebo_to_lerobot ...</code> pour chaque étape.</td><td>—</td></tr></tbody></table></div>
 <p class="prose">D-A2 est un <b>écart délibéré au protocole d’Osama</b> (invariant I4 : la vérité terrain sert uniquement à la validation). Il est pris parce que YOLO ne peut pas tourner dans le conteneur (pas de torch, pas d’ultralytics, CPU seulement) et parce qu’un VLA ne voit jamais comment le démonstrateur a localisé les objets. L’enregistreur enveloppe son nœud sans le modifier : avec <code>pose_source:=perception</code> sur une machine dotée d’un GPU, les mêmes commandes enregistrent ses exécutions pilotées par la perception.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">D.3 Étape 1 : reprendre le code d’Osama</h3>
-<pre>cd ~/tomislav/robotics/mycobot_320pi_R6A_tomislav_07_10_2026_ver_2git remote add upstream https://github.com/ABMI-software/mycobot_320pi_R6A.gitgit fetch upstream maingit switch -c feature/sort-episodesgit merge --no-ff upstream/main</pre>
+<pre>cd ~/tomislav/robotics/mycobot_320pi_R6A_tomislav_07_10_2026_ver_2
+git remote add upstream https://github.com/ABMI-software/mycobot_320pi_R6A.git
+git fetch upstream main
+git switch -c feature/sort-episodes
+git merge --no-ff upstream/main</pre>
 <p class="prose">Le conteneur se construit à partir d’un montage lié d’un autre checkout (<code>~/tomislav/robotics/mycobot_320pi_R6A_tomislav_02_10_2026/Gazebo_to_LeRobot_Pipeline/src</code>), si bien que ses <code>mycobot_gateway</code> et <code>mycobot_description</code> sont remplacés par les versions fusionnées, <b>après une sauvegarde</b>, en gardant ses modifications locales qui n’entrent pas en conflit avec la scène d’Osama (<code>update_rate: 100</code>, <code>sorting_table.sdf</code>, <code>policy_runner_node.py</code> ; pas l’ancienne surcharge de l’URDF Gazebo). <code>scripts/diff_ik.py</code> et <code>training/dream/mycobot_fk.py</code> sont copiés dans le montage aux mêmes chemins relatifs. Puis <code>colcon build --packages-select mycobot_description mycobot_gateway</code>.</p>
 <p class="prose">✅ <b>Critère d’achèvement :</b> les deux paquets se construisent ; <code>tri_yolo seed:=1</code> démarre avec 4 pièces, 4 bacs et trois contrôleurs actifs.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">D.4 Étape 2 : positions issues de la vérité terrain, et l’essai de fumée</h3>
 <p class="prose"><code>sim_sorting_grasp</code> gagne <code>pose_source:=ground_truth</code> : identique à <code>perception</code> (pose d’observation, échantillons stables, saisie, lâcher) mais en lisant <code>/validation/gt/objects</code>, que <code>tri_yolo</code> publie déjà.</p>
-<pre>ros2 launch mycobot_gateway tri_yolo.launch.py seed:=1 piece_reach:=0.28 headless:=true yolo:=falseros2 run mycobot_gateway sim_sorting_grasp --ros-args -p use_sim_time:=true -p world_name:=tri_yolo \    -p pose_source:=ground_truth -p max_attempts:=2 -p wall_timeout_scale:=15.0 -p startup_timeout:=600.0</pre>
+<pre>ros2 launch mycobot_gateway tri_yolo.launch.py seed:=1 piece_reach:=0.28 headless:=true yolo:=false
+ros2 run mycobot_gateway sim_sorting_grasp --ros-args -p use_sim_time:=true -p world_name:=tri_yolo \
+    -p pose_source:=ground_truth -p max_attempts:=2 -p wall_timeout_scale:=15.0 -p startup_timeout:=600.0</pre>
 <p class="prose">✅ <b>Critère d’achèvement :</b> graine 1 triée 4/4, écarts aux centres des bacs comparables à ceux d’Osama pour la même graine.</p>
 <h3 style="margin-top:26px;font-size:1.1rem">D.5 Étape 3 : ce qu’il faut enregistrer, décidé avant le premier enregistrement</h3>
 <p class="prose">Ce dont un modèle a besoin peut être calculé plus tard à partir de ce qui a été enregistré, jamais ajouté. Les choix irréversibles :</p>
@@ -1048,7 +1681,7 @@ main a { color: var(--accent); }
 <li><b>Remise à zéro exacte de l’état</b> au début de chaque pièce (<code>scripts/gz_systems/state_reset.py</code>, un système Gazebo en Python) : un instantané des 12 articulations du robot, de la commande de pince et des poses des quatre pièces, pris par le lot (ou chargé depuis lui, <code>RESET_FROM</code>), est remis au bit près avec des vitesses nulles ; la consigne de vitesse des articulations est mise à zéro avant le pas de physique, la remise à zéro est répétée sur les 10 pas jusqu’à une mise à jour des contrôleurs, les contrôleurs reçoivent des commandes de maintien identiques, et un instant caméra plus tôt la scène est placée « loin » pour que le moteur de rendu redessine tout à la remise exacte. À partir de là, l’exécution ne dépend plus de rien de ce qui s’est passé avant ; une pièce peut être recalculée seule (<code>repeat_eval_gui.sh &lt;dossier&gt; [pièce]</code>).</li>
 <li><b>Enregistrement et relecture</b> (<code>RECORD=1</code>, <code>play_eval_gui.sh</code>) : l’état de Gazebo toutes les 20 ms de temps simulé, relu sans rien recalculer.</li>
 </ol>
-<p class="prose"><b>Règle pour chaque message de la boucle :</b> soit il ne peut pas être perdu, soit une perte arrête ou retarde l’exécution ; jamais « l’exécution continue avec des données anciennes ». Les commandes du bras et de la pince (dont les contrôleurs s’abonnent en BEST_EFFORT) sont envoyées trois fois pendant la pause et <b>relues</b> après la première mise à jour des contrôleurs de chaque période d’action : les six commandes de la pince dans l’introspection du gestionnaire de contrôleurs doivent être exactement égales à la commande envoyée, la trajectoire du bras doit donner les points envoyés à son premier, son point du milieu et son avant-dernier point (<code>query_state</code>). L’état articulaire lu par la politique vient de Gazebo lui-même (requête d’état au plugin de remise à zéro, avec le temps simulé de Gazebo). Les images ne sont utilisées que si elles sont horodatées exactement à l’instant courant. Une relecture manquante ou différente arrête l’exécution avec une erreur.</p>
+<p class="prose"><b>Règle pour chaque message de la boucle :</b> soit il ne peut pas être perdu, soit une perte arrête ou retarde l’exécution ; jamais « l’exécution continue avec des données anciennes ». Les commandes du bras et de la pince (dont les contrôleurs s’abonnent en BEST_EFFORT) sont envoyées trois fois pendant la pause et <b>relues</b> après la première mise à jour des contrôleurs de chaque période d’action : les six commandes de la pince dans l’introspection du gestionnaire de contrôleurs doivent être exactement égales à la commande envoyée, la commande du bras, à la mise à jour des contrôleurs qui tombe sur chacun des 50 points de passage d’un segment, doit être exactement ce point. Aucun service des contrôleurs n’est appelé une fois l’exécution verrouillée (30/10 : <code>query_state</code> déplaçait l’indice de recherche du contrôleur du bras et envoyait le bras au dernier point de chaque segment). Chaque pièce tourne dans un serveur démarré à neuf depuis son propre instantané de départ, dans un lot exactement comme dans une reprise, et doit passer un contrôle d’acceptation du suivi face au lot en mode libre (erreur de suivi aux points de passage médiane ≤ 2°, aucune articulation à ≥ 3,0 rad/s). L’état articulaire lu par la politique vient de Gazebo lui-même (requête d’état au plugin de remise à zéro, avec le temps simulé de Gazebo). Les images ne sont utilisées que si elles sont horodatées exactement à l’instant courant. Une relecture manquante ou différente arrête l’exécution avec une erreur.</p>
 <p class="prose"><b>Tests et critères d’achèvement :</b></p>
 <ul class="prose">
 <li>Test A : graine 17 exécutée en mode verrouillé (A1), puis recalculée à partir des instantanés d’A1 (A2) : chaque pièce identique (empreintes du départ, des images, des états articulaires, des actions et des poses des pièces à chaque pas).</li>
@@ -1058,8 +1691,8 @@ main a { color: var(--accent); }
 </ul>
 <h3 style="margin-top:26px;font-size:1.1rem">E.9 Ce qui n’est pas encore fait (au 2026-10-30), dans l’ordre</h3>
 <ol class="prose">
-<li><b>Test A</b> (première moitié faite) : A1 a exécuté les quatre pièces de la graine 17 en mode verrouillé le 2026-10-29, de 16:29 à 18:50, sans arrêt (aucune relecture en échec, aucun horodatage en défaut). A2, le recalcul à partir des instantanés d’A1, a démarré le 2026-10-30 à 13:17 (environ 2 h 20) ; puis <code>compare_runs.py</code>. Si une pièce diffère : indiquer le premier pas et la grandeur qui diffèrent, corriger cette source, relancer.</li>
-<li><b>Deux améliorations avant le lot :</b> relancer automatiquement une pièce depuis son instantané de départ après un arrêt de relecture ou d’horodatage, 3 fois au plus, chaque relance étant consignée et devant reproduire la même empreinte ; conserver durablement l’instantané de départ de chaque pièce avec les résultats du lot.</li>
+<li><b>Test A</b> (non réussi) : A1 (29/10) et A2 (30/10, 13:17–15:56) sans arrêt de relecture, mais seul le cube rouge identique ; le pavé jaune, le cylindre vert et le cube bleu se sont écartés au pas 52, et le mouvement du bras de toutes les exécutions verrouillées jusqu’ici était faussé par <code>query_state</code> (sans valeur comme évaluations de la politique ; leurs conclusions sur le déterminisme tiennent). Rejeux des actions du pavé jaune : deux fois dans le même serveur, écart au pas 5 ; deux serveurs neufs, écart au pas 4 (vitesse d’une articulation de doigt) ; ASLR désactivé : en attente. Ensuite : relancer A1 et A2 en serveurs neufs avec la relecture passive ; réussi si chaque pièce est identique et acceptée par le contrôle de suivi.</li>
+<li><b>Fait le 30/10 :</b> relance automatique d’une pièce arrêtée depuis son instantané de départ (3 fois au plus, chacune consignée, reproduisant chaque pas déjà fait) et instantanés de départ conservés avec les résultats du lot (<code>snapshot_&lt;pièce&gt;.json</code>), commit <code>f03a9920</code>.</li>
 <li><b>Tests B et C</b> (voir E.8).</li>
 <li><b>Vitesse.</b> Une période d’action en mode verrouillé prend environ 5 s d’horloge murale (une pièce environ 35 min) ; les requêtes de temps et d’état adressées à Gazebo lancent chacune un processus <code>gz</code> en ligne de commande et doivent passer par l’écouteur persistant avant le lot de 50 graines (estimé sinon à environ 2 jours de CPU).</li>
 <li><b>La comparaison de 50 graines en mode verrouillé</b> du Run B 20k (E.7, E.8).</li>

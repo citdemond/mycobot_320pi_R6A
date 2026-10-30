@@ -1,5 +1,39 @@
 # Reprise — pick adaptatif LIVE par démonstration
 
+## Test A non réussi ; A1, A2 et rejeux sans valeur comme évaluations ; relecture passive (30 octobre 2026, soir)
+
+- **A2** (13:17-15:56, aucun arrêt de relecture, comme A1) : cube rouge identique au bit ; pavé
+  jaune, cylindre vert et cube bleu s'écartent d'A1 au **pas 52** (1,04° / 0,0013° / 2,7e-11°).
+  Pas 50-52 = début du 2e segment : mouvement le plus violent de chaque pièce (articulations à
+  3,14 rad/s, doigts projetés), pince loin de toute pièce (72-237 mm) ; saturations et butées
+  amplifient un écart d'arrondi (cube bleu 4,7e-13 → 3,7e-2 en un pas).
+- **Rejeux des actions du pavé jaune d'A1** (sans politique, 120 pas, `/workspace/eval/steplock_tests/replay/`) :
+  (a) même serveur deux fois → l'état d'après la remise diffère déjà (pose du cube rouge 3,5e-18),
+  pas 5 ; (b) deux serveurs neufs → état d'après la remise identique, écart au pas 4 (vitesse de
+  `gripper_right3_to_gripper_right1`, 1,2e-4 rad/s) ; (c) ASLR désactivé : **en attente** de
+  `sudo sysctl -w kernel.randomize_va_space=0` (à remettre à 2 juste après).
+- **A1, A2 et les rejeux ne valent pas comme évaluations de la politique** (leurs conclusions sur le
+  déterminisme tiennent) : la relecture appelait `query_state` au milieu et à l'avant-dernier point
+  du segment ; ce service déplace l'indice de recherche du contrôleur, qui commandait alors le
+  dernier point : bras au dernier point à 3,14 rad/s (J6), erreur de suivi médiane 44-86° dans
+  les premiers segments contre 1,01° en mode libre. Le lot du 27/10 (tableau façon article) n'est
+  pas touché.
+- **Corrigé** : aucun service des contrôleurs une fois verrouillé ; vérification passive à chaque
+  point de passage (commande du bras = point exact, dernière mise à jour de chaque période, 10
+  échantillons d'introspection exigés) ; contrôle d'acceptation par pièce (médiane ≤ 2°, aucune
+  période à ≥ 3,0 rad/s). Serveur neuf par pièce et relance automatique : `f03a9920`.
+- Bornes de segment (lot du 27/10) : saut au changement médiane 7 mm, p90 12-16 mm ; un pas de
+  67,5° dans un segment hors distribution (entraînement : 20,2° au plus). Options (moins
+  d'actions par segment, fondu, limitation de vitesse) **après** le test A, fixées d'avance.
+- Physique sur un seul fil (DART) ; OpenMP seulement dans les bibliothèques d'images.
+
+### Prochaines actions
+1. [ROUGE] (c) dès que l'ASLR est désactivé, puis remettre `randomize_va_space=2`.
+2. [ROUGE] Synchroniser le code dans `~/tri_sort_ws/src/scripts`, court essai de la relecture
+   passive, puis test A en serveurs neufs (A1 puis A2), avec le contrôle d'acceptation.
+3. [JAUNE] Options de bornes de segment, inscrites au protocole avant tout essai, identiques pour
+   Run B et Run C.
+
 ## Documentation du tri mise à jour ; test A2 en cours (30 octobre 2026, début d'après-midi)
 
 - Spécification : annexe E ajoutée (EN), **version française complète** (docx) et versions HTML

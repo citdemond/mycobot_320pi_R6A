@@ -225,6 +225,31 @@ def prepare_piece(node, target, start_q):
     return node.snapshot()
 
 
+# Acceptance of a step-locked run: the arm must follow the commands as in the free-running batch
+# (27/10, 19 900 waypoints: tracking error median 1.01 deg, p90 6.8; any joint at >= 3.0 rad/s in
+# 0.12 % of periods; URDF limit 3.14 rad/s). 30/10, test A: query_state had the arm run to each
+# chunk's last point, median 44-86 deg in the first chunks, J6 at 3.14 rad/s.
+TRACKING_MEDIAN_MAX_DEG = 2.0
+FAST_JOINT_RAD_S = 3.0
+FAST_PERIODS_MAX = 0.002
+
+
+def tracking(trace):
+    """Tracking error at the waypoints (state at a period's end vs that period's action) and joint
+    speeds over each period, from Gazebo's joint velocities at the period ends."""
+    err = np.degrees([np.abs(np.asarray(s['state'][:6]) - np.asarray(s['action'][:6])).max() for s in trace])
+    fast = [any(abs(s['full']['velocities'].get(j, 0.0)) >= FAST_JOINT_RAD_S for j in ARM_JOINTS) for s in trace]
+    q = np.asarray([s['state'][:6] for s in trace])
+    speed = np.abs(np.diff(q, axis=0)).max(axis=1) / DT if len(q) > 1 else np.zeros(1)
+    fast = [f or v >= FAST_JOINT_RAD_S for f, v in zip(fast, [0.0] + list(speed))]
+    out = {'median_deg': round(float(np.median(err)), 2), 'p90_deg': round(float(np.percentile(err, 90)), 2),
+           'max_deg': round(float(err.max()), 2), 'max_joint_speed': round(float(speed.max()), 2),
+           'fast_periods': int(sum(fast)), 'periods': len(trace)}
+    out['accepted'] = bool(out['median_deg'] <= TRACKING_MEDIAN_MAX_DEG
+                           and out['fast_periods'] <= FAST_PERIODS_MAX * len(trace))
+    return out
+
+
 def recorded_chunks(run_dir, name):
     """The actions a step-locked run played for `name`, chunk by chunk (--replay-actions)."""
     steps = [json.loads(line) for line in (run_dir / f'trace_{name}.jsonl').read_text().splitlines()[1:]]
@@ -260,14 +285,12 @@ def run_piece_locked(node, model, target, args, out, snap, attempt=1):
                      else model.predict(images, state, INSTRUCTIONS[name], seed=args.seed * 100000 + len(trace)))
             infer_s.append(time.monotonic() - t)
             n = min(len(chunk), args.n_action_steps, args.max_steps - len(trace))
-            t_chunk = node.now_ns()
             node.publish_arm([a[:6] for a in chunk[:n]], dt=DT)
             grip = None
             for k, a in enumerate(chunk[:n]):
                 if grip is None or abs(a[6] - grip) > 1e-4:
                     grip = float(a[6])
-                node.locked_action(grip, [(t_chunk + int(round(DT * 1e9)) * (i + 1), chunk[i][:6])
-                                          for i in sorted({0, n // 2, max(n - 2, 0)})] if k == 0 else ())
+                node.locked_action(grip, a[:6])
                 full = node.gz_state(pieces=True)
                 state = node.policy_state(full)
                 trace.append({'t_ns': node.now_ns() - start_t, 'chunk': chunks, 'state': state,
@@ -318,6 +341,7 @@ def run_piece_locked(node, model, target, args, out, snap, attempt=1):
             'max_z': round(max_z, 4), 'piece0': np.round(piece0, 4).tolist(),
             'end': None if end is None else np.round(end, 4).tolist(), 'bin_xy': np.round(bin_xy, 4).tolist(),
             'steps': len(trace), 'chunks': chunks, 'infer_s_median': round(float(np.median(infer_s)), 1),
+            'tracking': tracking(trace),
             'fingerprint': fingerprint}
 
 

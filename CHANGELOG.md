@@ -9,6 +9,17 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Non publié]
 
+### Corrigé — mode verrouillé : relecture du bras passive, contrôle d'acceptation du suivi (30/10)
+
+- **`step_lock.py`** : plus aucun appel de service des contrôleurs une fois verrouillé.
+  `query_state` déplaçait l'indice de recherche du contrôleur du bras, qui envoyait alors le bras
+  au dernier point de chaque segment à sa vitesse limite (test A). La commande du bras à la mise à
+  jour qui tombe sur chaque point de passage doit être exactement ce point (introspection).
+- **`eval_smolvla_tri_sort.py`** : `tracking` par pièce (erreur de suivi aux points de passage,
+  vitesses), acceptée si médiane ≤ 2° et aucune période à ≥ 3,0 rad/s.
+- Documentation : §57-58 et E.8-E.9 (EN/FR) ; A1, A2 et rejeux marqués sans valeur comme
+  évaluations de la politique ; HTML de la spécification : les blocs de code gardent leurs lignes.
+
 ### Modifié — mode verrouillé : un serveur Gazebo neuf par pièce, relance automatique (30/10)
 
 - **`eval_tri_seed.sh STEP_LOCKED=1`** : chaque pièce tourne dans un serveur Gazebo démarré à neuf
