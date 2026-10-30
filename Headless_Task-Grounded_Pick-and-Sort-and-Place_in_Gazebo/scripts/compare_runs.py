@@ -36,6 +36,47 @@ def outcome(r):
             else 'not picked') + f", {r.get('steps')} steps"
 
 
+def quantities(full):
+    """Flatten a Gazebo state (step_lock.gz_state(pieces=True)) into {quantity name: value}."""
+    out = {}
+    for kind in ('positions', 'velocities'):
+        for joint, v in full.get(kind, {}).items():
+            out[f'joint {joint} {kind[:-1]}'] = [v]
+    for piece, s in (full.get('pieces') or {}).items():
+        for kind, v in s.items():
+            out[f'{piece} {kind}'] = v
+    return out
+
+
+def first_quantity(x, y):
+    """The quantity that differs most between two Gazebo states, and by how much; None if equal."""
+    qx, qy = quantities(x), quantities(y)
+    worst = None
+    for key in sorted(set(qx) | set(qy)):
+        if key not in qx or key not in qy:
+            return f'{key} present in one run only'
+        d = float(np.abs(np.array(qx[key]) - np.array(qy[key])).max())
+        if d and (worst is None or d > worst[1]):
+            worst = (key, d)
+    return None if worst is None else f'{worst[0]} by {worst[1]:.3g}'
+
+
+def first_full_difference(a, b):
+    """Step-locked runs with the full Gazebo state per step: where the physical state first parts."""
+    ha, hb = a['head'].get('after_reset'), b['head'].get('after_reset')
+    if ha is not None and hb is not None:
+        q = first_quantity(ha, hb)
+        if q:
+            return f'state after the exact reset already differs: {q}'
+    for k, (x, y) in enumerate(zip(a['steps'], b['steps'])):
+        if 'full' not in x or 'full' not in y:
+            return None
+        q = first_quantity(x['full'], y['full'])
+        if q:
+            return f'Gazebo state first differs at step {k} (chunk {x["chunk"]}): {q}'
+    return 'Gazebo state equal at every step'
+
+
 def first_difference(a, b):
     sa, sb = a['head'].get('start_state'), b['head'].get('start_state')
     if sa is not None and sb is not None and sa != sb:
@@ -54,6 +95,9 @@ def first_difference(a, b):
             note += f'; same steps up to {min(len(a["steps"]), len(b["steps"]))}, then one run stops'
         else:
             note += '; every step equal'
+    full = first_full_difference(a, b)
+    if full:
+        note += f'; {full}'
     for k, (x, y) in enumerate(zip(a['frames'], b['frames'])):
         if x['sha256'] != y['sha256']:
             cams = [c for c in x['sha256'] if x['sha256'][c] != y['sha256'].get(c)]

@@ -23,7 +23,9 @@ joint 1), and the repeats bring every joint to the snapshot at rest before the c
 
 A request with "state": true instead returns, in the next system call (paused or not), the
 positions and velocities of every joint of the model as Gazebo holds them, with Gazebo's own
-simulation time: "state <id> <base64 JSON {t_ns, positions, velocities}>". The controllers' joint
+simulation time: "state <id> <base64 JSON {t_ns, positions, velocities[, pieces]}>". With
+"pieces": [model, ...] it also returns each of those models' canonical link as Gazebo holds it:
+world pose [x, y, z, qw, qx, qy, qz], linear and angular velocity. The controllers' joint
 states are stamped with their nodes' ROS clock, which follows a BEST_EFFORT /clock and can lag a
 step under load (29/10, test A); this reply cannot.
 
@@ -51,6 +53,7 @@ class StateReset:
         self.pending = None
         self.state_request = None
         self.checks_enabled = False
+        self.links_checked = set()
         self.seen = set()
         self.node.subscribe(StringMsg, f'/world/{name}/state_reset', self.on_request)
 
@@ -68,6 +71,14 @@ class StateReset:
         self.publish(f"received {request['id']}")
 
     def pre_update(self, info, ecm):
+        # Link velocity components exist only once asked for, and are filled by the next physics
+        # step: asked for on every model as soon as it appears, so a piece's velocity is there by
+        # the time a state is requested while paused.
+        for m in self.world.models(ecm):
+            if m not in self.links_checked:
+                self.links_checked.add(m)
+                for link in Model(m).links(ecm):
+                    Link(link).enable_velocity_checks(ecm, True)
         # Joint position and velocity components exist only once asked for: enabled as soon as the
         # robot is there (start-up), so they are filled by the time a state is requested.
         if not self.checks_enabled:
@@ -91,6 +102,17 @@ class StateReset:
         state = {'t_ns': int(round(info.sim_time.total_seconds() * 1e9)),
                  'positions': {n: positions[n][0] for n in moving},
                  'velocities': {n: velocities[n][0] for n in moving if velocities[n]}}
+        if request.get('pieces'):
+            state['pieces'] = {}
+            for name in request['pieces']:
+                link = Link(Model(self.world.model_by_name(ecm, name)).canonical_link(ecm))
+                pose, lin, ang = link.world_pose(ecm), link.world_linear_velocity(ecm), link.world_angular_velocity(ecm)
+                if pose is None or lin is None or ang is None:
+                    return
+                state['pieces'][name] = {
+                    'pose': [pose.pos().x(), pose.pos().y(), pose.pos().z(),
+                             pose.rot().w(), pose.rot().x(), pose.rot().y(), pose.rot().z()],
+                    'linear': [lin.x(), lin.y(), lin.z()], 'angular': [ang.x(), ang.y(), ang.z()]}
         self.state_request = None
         self.publish(f"state {request['id']} " + base64.b64encode(json.dumps(state).encode()).decode())
 

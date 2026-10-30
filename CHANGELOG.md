@@ -9,6 +9,24 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Non publié]
 
+### Modifié — mode verrouillé : un serveur Gazebo neuf par pièce, relance automatique (30/10)
+
+- **`eval_tri_seed.sh STEP_LOCKED=1`** : chaque pièce tourne dans un serveur Gazebo démarré à neuf
+  depuis son instantané de départ, dans un lot comme dans une reprise (`RESET_FROM`) ; le lot
+  prépare l'instantané de la pièce suivante à la fin du serveur de la précédente
+  (`snapshot_<pièce>.json`, conservés avec les résultats). Une pièce arrêtée par un contrôle
+  (relecture, horodatage) est relancée depuis son instantané, 3 fois au plus (`restarts.log`), et
+  doit reproduire chaque pas déjà fait. Serveur à `OMP_NUM_THREADS=1`.
+- **`eval_smolvla_tri_sort.py`** : `--prepare`, `--prepare-next`, `--start-index`,
+  `--replay-actions` (rejoue les actions d'une exécution, sans politique), `--repeat`, `--attempt` ;
+  la trace garde à chaque pas l'état Gazebo complet (articulations, vitesses, poses et vitesses des
+  pièces) et les commandes vues par les contrôleurs.
+- **`gz_systems/state_reset.py`** : la requête d'état rend aussi pose, vitesse linéaire et angulaire
+  des pièces. **`compare_runs.py`** : première grandeur physique qui diffère.
+- Test A (30/10) : A2 identique à A1 sur le cube rouge, différent dès le pas 52 sur les trois
+  autres pièces ; rejeu dans un même serveur (a) : différent dès l'état d'après la remise à zéro
+  (pose du cube rouge à 3,5e-18 près) puis au pas 5.
+
 ### Documentation — spécification et rapport du tri à quatre objets mis à jour (30/10)
 
 - **`FOUR_OBJECT_SORTING_SPECIFICATION.docx`** : annexe E (plan et critères depuis le dépôt de la

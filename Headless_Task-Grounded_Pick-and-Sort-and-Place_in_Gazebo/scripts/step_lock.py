@@ -248,6 +248,12 @@ class StepLock:
         self.step(first)
         self.confirm(since, grip, arm_points)
         self.step(TICK_NS // STEP_NS - first)
+        # What the controllers held at each update of this period, as far as their BEST_EFFORT
+        # introspection delivered it (arrival number, gripper command, arm commands): a command
+        # changing inside a period shows here, the first-update read-back cannot see it.
+        self._drain(0.2)
+        self.period_commands = [[n, held.get(GRIPPER_JOINTS[0]), [held.get(j) for j in ARM_JOINTS]]
+                                for n, held in self.introspection if n > since]
 
     def gz_sim_ns(self):
         """Gazebo's own simulation time (its /stats), independent of the ROS /clock relay."""
@@ -342,8 +348,12 @@ class StepLock:
         return poses
 
     def snapshot(self):
-        """Everything start_from needs to put the scene back to the bit (velocities are reset to 0)."""
-        return {'joints': dict(self.gz_state()['positions']), 'grip_cmd': self.grip_cmd, 'poses': self.piece_poses()}
+        """Everything start_from needs to put the scene back to the bit. Velocities are not restored
+        but reset to exactly 0 (joints and pieces) in every run; the ones Gazebo held when the
+        snapshot was taken are kept for the record (`at_capture`)."""
+        state = self.gz_state(pieces=True)
+        return {'joints': dict(state['positions']), 'grip_cmd': self.grip_cmd, 'poses': self.piece_poses(),
+                'at_capture': {'velocities': state['velocities'], 'pieces': state['pieces']}}
 
     def _replies_start(self):
         """One listener on the plugin's reply topic for the whole run (a listener per request
@@ -383,10 +393,12 @@ class StepLock:
         """A reset, applied by the plugin in each of the next `repeat` simulated steps."""
         self._request({'joints': joints, 'poses': poses, 'repeat': repeat}, 'received')
 
-    def gz_state(self):
+    def gz_state(self, pieces=False):
         """Every robot joint's position and velocity as Gazebo holds them now, with Gazebo's own
-        simulation time, which must be the time this node stepped to."""
-        state = json.loads(base64.b64decode(self._request({'state': True}, 'state')))
+        simulation time, which must be the time this node stepped to; with pieces, also each piece's
+        pose and linear and angular velocity."""
+        request = {'state': True, 'pieces': list(tri_scene.OBJECTS)} if pieces else {'state': True}
+        state = json.loads(base64.b64decode(self._request(request, 'state')))
         if state['t_ns'] != self.now_ns():
             raise RuntimeError(f'step-locked: Gazebo state at {state["t_ns"]} ns, expected {self.now_ns()}')
         return state
@@ -428,7 +440,8 @@ class StepLock:
         self.confirm(since, snap['grip_cmd'], arm_command=q_arm)
         if (self.now_ns() - self.phase_ns) % TICK_NS:
             raise RuntimeError(f'step-locked: exact reset not on a tick (now {self.now_ns()})')
-        state = self.gz_state()
+        state = self.gz_state(pieces=True)
+        self.after_reset = state
         self.joint_all, self.joint_velocity = state['positions'], state['velocities']
         # Gazebo's last step leaves ~1e-14 rad and ~1e-11 rad/s (29/10); what must be identical is two
         # runs from the same snapshot, which the fingerprints compare. This only catches a failed reset.
